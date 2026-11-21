@@ -103,12 +103,12 @@
     position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));
     text-align:center;color:rgba(255,255,255,.85);font-size:.75rem;
   }
-  .footer-splash{ /* 4 baris di dasar splash */
+  .footer-splash{ /* 3 baris di dasar splash */
     position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));padding:0 28px;
     text-align:center;color:rgba(255,255,255,.85);font-size:.72rem;line-height:1.5;
   }
-  .footer-splash div+div{margin-top:0}                 /* baris 1-2 dan 3-4 saling merapat */
-  .footer-splash div:nth-child(3){margin-top:3px}      /* jarak baris 2 ke 3 tetap seperti semula */
+  .footer-splash div+div{margin-top:0}                 /* baris 1-2 saling merapat */
+  .footer-splash div:nth-child(3){margin-top:5px}      /* jarak baris 2 ke 3 (footer terakhir) */
   .footer-splash .versi-app{font-weight:700;color:#fff}
   @keyframes muncul{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .logo-pusat img{animation-name:muncul-logo}
@@ -1668,8 +1668,7 @@
     <div class="footer-splash">
       <div>Manajemen Data Terpadu untuk Layanan Publik.</div>
       <div>Layanan administrasi dan informasi berbasis digital.</div>
-      <div>Powered by Anto Design Concept &copy; 2026</div>
-      <div class="versi-app">Versi 4.10</div>
+      <div class="versi-app">Medulu-V2 &copy; 2026</div>
     </div>
   </section>
 
@@ -1700,7 +1699,7 @@
       <button class="btn" id="btnMasuk" type="submit">Masuk</button>
       <div class="catatan-login"><i class="fa-solid fa-lock"></i> Data Anda dijaga kerahasiaannya</div>
     </form>
-    <div class="footer-biru">Powered by Anto Design Concept &copy; 2026</div>
+    <div class="footer-biru">Medulu-V2 &copy; 2026</div>
   </section>
 
   <!-- ========== B. HALAMAN UTAMA ========== -->
@@ -1787,7 +1786,7 @@
       </div>
       <div class="sp-titik" id="dsTitik" role="tablist" aria-label="Navigasi Data Statistik"></div>
 
-      <div class="footer-utama" style="margin-top:26px">Powered by Anto Design Concept &copy; 2026</div>
+      <div class="footer-utama" style="margin-top:26px">Medulu-V2 &copy; 2026</div>
     </div>
   </main>
 
@@ -6692,6 +6691,24 @@ function dbGantiModal(judul, html, simpanFn, labelSimpan){
   $('mfSimpan').textContent = labelSimpan || 'Simpan'; $('mfSimpan').style.display = simpanFn ? '' : 'none';
   mfSimpanFn = simpanFn; $('mfBatal').textContent = simpanFn ? 'Batal' : 'Tutup'; $('mfIsi').scrollTop = 0;
 }
+/* Data Keluarga (hanya tampil bila yang diedit Kepala Keluarga; perubahannya diteruskan ke semua anggota satu NKK) */
+const DB_KELUARGA = [['nama_kk', ['namakk']], ['nkk', ['nkk', 'nokk']], ['no_hp', ['nohp', 'hp', 'telp']],
+  ['alamat', ['alamat']], ['email', ['email']], ['status_tinggal', ['statustinggal']]];
+const DB_LABEL_KELUARGA = { nama_kk:'Nama KK', nkk:'NKK', no_hp:'No. HP', alamat:'Alamat', email:'Email', status_tinggal:'Status Tinggal' };
+const OPSI_TINGGAL = ['WAT', 'WAP', 'WDT', 'WDS'];
+function dbInputKeluarga(j, k, v){
+  const nilai = (v === null || v === undefined) ? '' : String(v);
+  const aw = `data-wk="${esc(k)}" data-awal="${esc(nilai)}" data-kel="1"`;
+  if (j === 'status_tinggal'){
+    const daftar = nilai && !OPSI_TINGGAL.includes(nilai) ? [nilai, ...OPSI_TINGGAL] : OPSI_TINGGAL;
+    return `<select ${aw}><option value="">— Pilih —</option>${daftar.map(o => `<option ${o === nilai ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  }
+  if (j === 'nkk') return `<input type="text" inputmode="numeric" maxlength="16" placeholder="16 digit NKK" ${aw} value="${esc(nilai)}">`;
+  if (j === 'no_hp') return `<input type="tel" inputmode="tel" placeholder="08xxxxxxxxxx" ${aw} value="${esc(nilai)}">`;
+  if (j === 'email') return `<input type="email" placeholder="nama@email.com" ${aw} value="${esc(nilai)}">`;
+  if (j === 'alamat') return `<textarea ${aw}>${esc(nilai)}</textarea>`;
+  return `<input type="text" ${aw} value="${esc(nilai)}">`;
+}
 const OPSI_AGAMA = ['Islam', 'Kristen', 'Hindu', 'Budha'];   // pilihan Agama di Modal Edit Data
 function dbInputKolom(k, v){
   const aw = (x) => `data-wk="${esc(k)}" data-awal="${esc(x)}"`;
@@ -6733,13 +6750,23 @@ function dbTampilInfo(w, semua, segarkan, baru){
 }
 function dbTampilEdit(x, asal, semua, segarkan){
   const raw = x.raw;
-  const kunci = Object.keys(raw).filter(k => !DB_SEMBUNYI_KOLOM.test(k) && !DB_KUNCI_SEMBUNYI.has(dbNormKunci(k)));
+  const kepalaKel = /kepala/i.test(x.hubungan);                  // hanya Kepala Keluarga yang menampilkan Data Keluarga
+  const kelNorm = new Set(DB_KELUARGA.flatMap(d => d[1]));
+  const kunci = Object.keys(raw).filter(k => !DB_SEMBUNYI_KOLOM.test(k) && !DB_KUNCI_SEMBUNYI.has(dbNormKunci(k)) && !kelNorm.has(dbNormKunci(k)));
   kunci.sort((a, b) => {
     const ia = DB_URUT_KOLOM.indexOf(/nikah|kawin/i.test(a) ? 'x' : a), ib = DB_URUT_KOLOM.indexOf(/nikah|kawin/i.test(b) ? 'x' : b);
     const ra = /nikah|kawin/i.test(a) ? 6.5 : (ia < 0 ? 99 : ia), rb = /nikah|kawin/i.test(b) ? 6.5 : (ib < 0 ? 99 : ib);
     return ra - rb || a.localeCompare(b);
   });
+  const subjudul = (t, ikon) => `<h4 class="dbk-sec" style="margin:14px 0 8px;font-size:.8rem;font-weight:700;color:var(--biru)"><i class="fa-solid ${ikon}" style="margin-right:6px"></i>${t}</h4>`;
+  const keluarga = !kepalaKel ? '' : subjudul('Data Keluarga', 'fa-people-roof') +
+    DB_KELUARGA.map(([j, alias]) => {
+      const k = Object.keys(raw).find(r => alias.includes(dbNormKunci(r)));
+      if (!k) return '';                                          // kolom belum ada di tabel warga: dilewati
+      return fld(DB_LABEL_KELUARGA[j], dbInputKeluarga(j, k, raw[k]));
+    }).join('') + subjudul('Data Pribadi', 'fa-user');
   const html = `<button type="button" class="pr-ed-add" data-mf="kembali" style="margin-bottom:12px"><i class="fa-solid fa-arrow-left"></i> Kembali ke Informasi Data</button>` +
+    keluarga +
     fld('NIK (kunci data, tidak dapat diubah)', `<input type="text" class="dbk-mati" value="${esc(x.nik)}" disabled>`) +
     kunci.map(k => {
       if (!DB_KUNCI_TERKUNCI.has(dbNormKunci(k))) return fld(dbLabelKolom(k), dbInputKolom(k, raw[k]));
@@ -6747,23 +6774,44 @@ function dbTampilEdit(x, asal, semua, segarkan){
       return fld(dbLabelKolom(k), `<input type="text" class="dbk-mati" value="${esc(teks)}" disabled>`);   // tanpa data-wk: tidak ikut disimpan
     }).join('');
   dbGantiModal('Edit Data: ' + x.nama, html, async () => {
-    const data = {};
+    const data = {}, dataKel = {};
     for (const el of $('mfIsi').querySelectorAll('[data-wk]')){
       const k = el.dataset.wk, awal = el.dataset.awal;
       if (el.type === 'checkbox'){ if (String(el.checked) !== awal) data[k] = el.checked; continue; }
       const nv = el.value.trim();
       if (nv === awal) continue;
       if (k === 'nama' && !nv) return { ok:false, pesan:'Nama lengkap wajib diisi.' };
-      data[k] = nv === '' ? null : (el.type === 'number' ? Number(nv) : nv);
+      const nilai = nv === '' ? null : (el.type === 'number' ? Number(nv) : nv);
+      data[k] = nilai;
+      if (el.dataset.kel) dataKel[k] = nilai;                    // item Data Keluarga: diteruskan ke anggota lain
     }
     if (!Object.keys(data).length) return { ok:false, pesan:'Tidak ada perubahan.' };
+    const kNkk = Object.keys(dataKel).find(k => /^(nkk|nokk)$/i.test(dbNormKunci(k)));
+    if (kNkk){
+      const nb = dataKel[kNkk];
+      if (!nb || !/^\d{16}$/.test(nb)) return { ok:false, pesan:'NKK harus 16 digit angka.' };
+      if (semua.some(m => m.nkk === nb && m.nkk !== x.nkk)) return { ok:false, pesan:'NKK tersebut sudah dipakai keluarga lain.' };
+    }
+    const nkkLama = x.nkk;
+    const anggota = (kepalaKel && Object.keys(dataKel).length && nkkLama) ? semua.filter(m => m !== x && m.nik && m.nkk === nkkLama) : [];
     const r = await kirimRpc('update_warga', { nik: x.nik, data });
     if (!r || !r.ok) return r || { ok:false, pesan:'Gagal menyimpan.' };
     dbTerapkanRaw(x, r.row || Object.assign({}, raw, data));
+    /* Perubahan Data Keluarga ikut diterapkan ke semua anggota keluarga lainnya (satu NKK) */
+    let gagal = 0;
+    if (anggota.length){
+      const hasil = await Promise.all(anggota.map(m => kirimRpc('update_warga', { nik: m.nik, data: dataKel })));
+      hasil.forEach((h, i) => {
+        const m = anggota[i];
+        if (h && h.ok) dbTerapkanRaw(m, h.row || Object.assign({}, m.raw || {}, dataKel));
+        else gagal++;
+      });
+    }
     dbHitungOpsi(semua);
     if (segarkan) segarkan();
     dbTampilInfo(asal, semua, segarkan, false);
-    return { ok:true, tetap:true, pesan:'Data warga tersimpan.' };
+    if (gagal) return { ok:true, tetap:true, pesan:'Data tersimpan, tetapi ' + gagal + ' anggota keluarga gagal diperbarui. Coba simpan ulang.' };
+    return { ok:true, tetap:true, pesan: anggota.length ? 'Data keluarga tersimpan untuk ' + (anggota.length + 1) + ' anggota.' : 'Data warga tersimpan.' };
   }, 'Simpan');
   mfNavFn = (aksi) => { if (aksi === 'kembali') dbTampilInfo(asal, semua, segarkan, false); };
 }

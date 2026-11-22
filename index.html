@@ -1857,7 +1857,7 @@
       <div class="mf-field"><label for="aaKec">Kecamatan <b>*</b></label>
         <select id="aaKec"><option value="">-- Pilih Kecamatan --</option></select></div>
       <div class="mf-field"><label for="aaKel">Kelurahan <b>*</b></label>
-        <input id="aaKel" type="text" maxlength="60" placeholder="Contoh: Bonggoeya" autocomplete="off"></div>
+        <select id="aaKel" disabled><option value="">-- Pilih Kecamatan dulu --</option></select></div>
       <div class="mf-dua">
         <div class="mf-field"><label for="aaRw">RW <b>*</b></label>
           <input id="aaRw" type="text" inputmode="numeric" maxlength="3" placeholder="05" autocomplete="off"></div>
@@ -2193,6 +2193,35 @@ async function periksaAdminAwal(){
     /* galat jaringan: biarkan formulir login tampil; pemeriksaan diulang saat halaman login tampil lagi */
   }
 }
+/* Kelurahan per kecamatan, Kota Kendari.
+   Sumber: Peraturan Wali Kota Kendari Nomor 29 Tahun 2025 tentang Susunan Organisasi dan Tata Kerja Kecamatan dan Kelurahan. */
+const KELURAHAN_KENDARI = {
+  'kendari': ['Kandai','Kendari Caddi','Gunung Jati','Kampung Salo','Mangga Dua','Kessilampe','Mata','Purirano','Jati Mekar'],
+  'kendaribarat': ['Kemaraya','Watu-Watu','Tipulu','Punggaloba','Benu-Benua','Sodohoa','Dapu-Dapura','Sanua','Labundape'],
+  'mandonga': ['Mandonga','Korumba','Alolama','Anggilowu','Wawombalata','Labibia'],
+  'puuwatu': ['Puuwatu','Abeli Dalam','Watulondo','Punggolaka','Tobuuha','Lalodati'],
+  'kadia': ['Kadia','Bende','Anaiwoi','Pondambea','Wawowanggu'],
+  'wuawua': ['Wua-Wua','Bonggoeya','Mataiwoi','Anawai'],
+  'baruga': ['Lepo-Lepo','Baruga','Watubangga','Wundudopi'],
+  'kambu': ['Kambu','Padaleu','Mokoau','Lalolara'],
+  'poasia': ['Anduonohu','Anggoeya','Rahandouna','Matabubu','Wundumbatu'],
+  'abeli': ['Abeli','Lapulu','Pudai','Talia','Benua Nirae','Poasia','Anggalolemelai'],
+  'nambo': ['Nambo','Petoaha','Tobimeita','Bungkutoko','Sambuli','Tondonggeu']
+};
+const kunciKec = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+/* Isi dropdown Kelurahan sesuai Kecamatan terpilih; aktif hanya setelah kecamatan dipilih */
+function isiKelurahanAdminAwal(){
+  const selKec = $('aaKec'), selKel = $('aaKel');
+  const kec = daftarKecamatan.find(k => String(k.kode) === selKec.value);
+  const daftar = kec ? (KELURAHAN_KENDARI[kunciKec(kec.nama)] || []) : [];
+  if (!kec){
+    selKel.innerHTML = '<option value="">-- Pilih Kecamatan dulu --</option>'; selKel.disabled = true; return;
+  }
+  selKel.innerHTML = '<option value="">-- Pilih Kelurahan --</option>' +
+    daftar.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  selKel.disabled = !daftar.length;
+  if (!daftar.length) selKel.innerHTML = '<option value="">Daftar kelurahan belum tersedia</option>';
+}
 function isiKecamatanAdminAwal(){
   const sel = $('aaKec'), pilih = sel.value;
   sel.innerHTML = '<option value="">-- Pilih Kecamatan --</option>' +
@@ -2208,11 +2237,12 @@ function perbaruiKodeAdminAwal(){
   k.style.display = '';
   k.textContent = 'Contoh nomor surat: 001/UND-RT' + dua(rt) + '/' + kec + '01' + dua(rw) + '/' + ROMAWI[new Date().getMonth()] + '/' + new Date().getFullYear();
 }
-['aaKec','aaKel','aaRw','aaRt'].forEach(id => $(id).addEventListener('input', perbaruiKodeAdminAwal));
+['aaKec','aaKel','aaRw','aaRt'].forEach(id => { $(id).addEventListener('input', perbaruiKodeAdminAwal); $(id).addEventListener('change', perbaruiKodeAdminAwal); });
+$('aaKec').addEventListener('change', () => { isiKelurahanAdminAwal(); perbaruiKodeAdminAwal(); });
 ['aaRw','aaRt'].forEach(id => $(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); }));
 function bukaModalAdminAwal(){
   ['aaKel','aaRw','aaRt','aaKetua','aaTelp','aaSandi','aaSandi2'].forEach(id => { $(id).value = ''; });
-  isiKecamatanAdminAwal(); $('aaKec').value = ''; $('aaKode').style.display = 'none';
+  isiKecamatanAdminAwal(); $('aaKec').value = ''; isiKelurahanAdminAwal(); $('aaKode').style.display = 'none';
   $('aaSandi').type = 'password'; $('aaMata').firstElementChild.className = 'fa-solid fa-eye';
   $('aaGalat').classList.remove('tampil');
   $('login').inert = true;                                         // fokus tidak bisa keluar ke formulir login di belakang
@@ -3831,6 +3861,58 @@ function setIkonHeader(jk){
    RPC (khusus Admin, memakai token sesi): cari_keluarga, tambah_warga_admin (file SQL 01); berkas KK -> bucket privat "kk".
    Hasil input langsung masuk ke tabel warga (master data).
    ===================================================================== */
+/* ---------- Berkas KK (dipakai Pendataan & Edit Data) ---------- */
+const BUCKET_KK = 'kk';
+const MAKS_BERKAS = 5 * 1024 * 1024;   // 5 MB
+function uuid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2,'0')).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+}
+/* Foto diperkecil (maks. 1800 px, JPEG) agar ringan diunggah */
+function kompresGambar(file){
+  return new Promise((ok, gagal) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const skala = Math.min(1, 1800 / Math.max(img.width, img.height));
+      const w = Math.round(img.width * skala), h = Math.round(img.height * skala);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+      c.toBlob(b => { URL.revokeObjectURL(url); b ? ok(b) : gagal(new Error('gagal')); }, 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); gagal(new Error('tidak terbaca')); };
+    img.src = url;
+  });
+}
+/* Validasi + kompres berkas pilihan. Mengembalikan { blob, tipe, ext, nama, ukuran, pratinjau } atau melempar Error(pesan) */
+async function siapkanBerkasKK(file){
+  if (file.type === 'application/pdf'){
+    if (file.size > MAKS_BERKAS) throw new Error('Ukuran PDF maksimal 5 MB.');
+    return { blob: file, tipe: 'application/pdf', ext: 'pdf', nama: file.name, ukuran: file.size, pratinjau: null };
+  }
+  if (file.type.startsWith('image/')){
+    let blob;
+    try{ blob = await kompresGambar(file); }catch(e){ throw new Error('Foto tidak dapat dibaca. Coba foto ulang atau gunakan PDF/JPG/PNG.'); }
+    if (blob.size > MAKS_BERKAS) throw new Error('Ukuran foto terlalu besar.');
+    return { blob, tipe: 'image/jpeg', ext: 'jpg', nama: file.name || 'foto-kk.jpg', ukuran: blob.size, pratinjau: URL.createObjectURL(blob) };
+  }
+  throw new Error('Format berkas harus PDF, JPG, atau PNG.');
+}
+async function unggahBerkasKK(nkk, berkas){
+  const path = nkk + '/' + uuid() + '.' + berkas.ext;
+  const { error } = await db.storage.from(BUCKET_KK).upload(path, berkas.blob, { contentType: berkas.tipe, upsert: false });
+  if (error) throw error;
+  return path;
+}
+/* Hapus berkas KK dari bucket (hanya path bucket; tautan lama https:// tidak disentuh). Gagal hapus tidak menggagalkan proses. */
+async function hapusBerkasKK(path){
+  if (!path || /^https?:\/\//i.test(path)) return;
+  try{ const { error } = await db.storage.from(BUCKET_KK).remove([path]); if (error) throw error; }
+  catch(e){ console.warn('Berkas KK lama tidak dapat dihapus', e); }
+}
 function renderPendataan(isi){
   if (!db){ isi.innerHTML = '<div class="kosong"><i class="fa-solid fa-plug-circle-xmark"></i> Aplikasi belum dihubungkan ke database.</div>'; return; }
   isi.innerHTML = `<div class="pd">
@@ -3888,6 +3970,8 @@ function renderPendataan(isi){
             <div class="pd-unggah">
               <button type="button" class="pd-btn-unggah" id="pd_btnKamera"><i class="fa-solid fa-camera"></i> Foto langsung</button>
               <button type="button" class="pd-btn-unggah" id="pd_btnFile"><i class="fa-solid fa-file-arrow-up"></i> Pilih file</button>
+              <button type="button" class="pd-btn-unggah" id="pd_btnLihat" style="display:none"><i class="fa-solid fa-file-lines"></i> Lihat KK</button>
+              <button type="button" class="pd-btn-unggah" id="pd_btnUbah" style="display:none"><i class="fa-solid fa-camera-rotate"></i> Ubah foto KK</button>
             </div>
             <input type="file" id="pd_inKamera" accept="image/*" capture="environment" hidden>
             <input type="file" id="pd_inFile" accept="application/pdf,image/jpeg,image/png" hidden>
@@ -3987,14 +4071,14 @@ function renderPendataan(isi){
     </form>
   </div>`;
   const P = (id) => document.getElementById('pd_' + id);
-  const BUCKET_KK = 'kk';
-  const MAKS_BERKAS = 5 * 1024 * 1024;   // 5 MB
 
 
   /* Status NKK yang sedang diketik:
      kosong | baru | perlu_verifikasi | tanpa_telp | terverifikasi */
   let statusNkk = 'kosong';
   let berkas = null;                       // { blob, tipe, ext, nama, ukuran, pratinjau }
+  let linkKk = null;                       // path/tautan KK yang sudah tersimpan untuk keluarga ini
+  let adaKk = false;                       // keluarga ini sudah pernah punya foto KK
 
   const FIELD_KELUARGA = ['nama_kk','alamat','status_tinggal','email'];
   const FIELD_PRIBADI  = ['nik','nama_lengkap','jender','hubungan','tempat_lahir','tgl_lahir','agama','status',
@@ -4002,13 +4086,6 @@ function renderPendataan(isi){
 
   /* ---------- Utilitas ---------- */
   function hanyaAngka(s){ return String(s||'').replace(/\D/g,''); }
-  function uuid(){
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    const b = crypto.getRandomValues(new Uint8Array(16));
-    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
-    const h = [...b].map(x => x.toString(16).padStart(2,'0')).join('');
-    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
-  }
   function tampilBanner(jenis, teks){
     const b = P('banner'); b.className = 'pd-banner pd-tampil pd-' + jenis; b.textContent = teks;
   }
@@ -4059,7 +4136,7 @@ function renderPendataan(isi){
   /* ---------- Kunci form sampai NKK terverifikasi ---------- */
   function aturKunci(){
     const kunci = statusNkk === 'perlu_verifikasi' || statusNkk === 'tanpa_telp';
-    [...FIELD_KELUARGA, 'btnKamera', 'btnFile'].forEach(id => { P(id).disabled = kunci; });
+    [...FIELD_KELUARGA, 'btnKamera', 'btnFile', 'btnUbah'].forEach(id => { P(id).disabled = kunci; });
     P('kartuPribadi').classList.toggle('pd-terkunci', kunci);
     P('kartuPemilu').classList.toggle('pd-terkunci', kunci);
     P('btnSimpan').disabled = kunci;
@@ -4098,8 +4175,9 @@ function renderPendataan(isi){
           if (data[f] && !P(f).value){ P(f).value = data[f]; P(f).classList.add('pd-terisi-otomatis'); }
         });
         tampilBanner('ok', 'Terverifikasi (' + data.jumlah + ' anggota terdaftar). Data keluarga terisi otomatis' +
-          (data.ada_berkas_kk ? ', berkas KK sudah ada (unggah lagi hanya bila ingin mengganti)' : '') +
+          (data.ada_berkas_kk || data.link_kk ? ', foto KK sudah ada (Lihat KK / Ubah foto KK)' : '') +
           '. Cukup isi data anggota yang ditambahkan.');
+        linkKk = data.link_kk || null; adaKk = !!(data.ada_berkas_kk || data.link_kk); aturModeKK();
         segarkanOtomatis();
       } else if (!data.ok){
         tampilBanner('galat', data.pesan || 'Terjadi kesalahan.');
@@ -4116,7 +4194,7 @@ function renderPendataan(isi){
     e.target.value = hanyaAngka(e.target.value).slice(0,16);
     P('hitungNkk').textContent = e.target.value.length;
     kosongkanOtomatis(); sembunyiBanner();
-    statusNkk = 'kosong'; aturKunci();
+    statusNkk = 'kosong'; aturKunci(); linkKk = null; adaKk = false; aturModeKK();
     if (e.target.value.length === 16) cekNkk(false);
   });
   P('no_hp').addEventListener('input', () => {
@@ -4169,54 +4247,28 @@ function renderPendataan(isi){
     if (berkas && berkas.pratinjau) URL.revokeObjectURL(berkas.pratinjau);
     berkas = null; tampilBerkas();
   }
-  /* Foto diperkecil (maks. 1800 px, JPEG) agar ringan diunggah */
-  function kompresGambar(file){
-    return new Promise((ok, gagal) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const skala = Math.min(1, 1800 / Math.max(img.width, img.height));
-        const w = Math.round(img.width * skala), h = Math.round(img.height * skala);
-        const c = document.createElement('canvas'); c.width = w; c.height = h;
-        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
-        c.toBlob(b => { URL.revokeObjectURL(url); b ? ok(b) : gagal(new Error('gagal')); }, 'image/jpeg', 0.82);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); gagal(new Error('tidak terbaca')); };
-      img.src = url;
-    });
-  }
   async function pilihBerkas(file){
     if (!file) return;
     try{
-      if (file.type === 'application/pdf'){
-        if (file.size > MAKS_BERKAS) return tampilBanner('galat', 'Ukuran PDF maksimal 5 MB.');
-        hapusBerkas();
-        berkas = { blob: file, tipe: 'application/pdf', ext: 'pdf', nama: file.name, ukuran: file.size, pratinjau: null };
-      } else if (file.type.startsWith('image/')){
-        const blob = await kompresGambar(file);
-        if (blob.size > MAKS_BERKAS) return tampilBanner('galat', 'Ukuran foto terlalu besar.');
-        hapusBerkas();
-        berkas = { blob, tipe: 'image/jpeg', ext: 'jpg', nama: file.name || 'foto-kk.jpg', ukuran: blob.size,
-                   pratinjau: URL.createObjectURL(blob) };
-      } else {
-        return tampilBanner('galat', 'Format berkas harus PDF, JPG, atau PNG.');
-      }
+      const baru = await siapkanBerkasKK(file);
+      hapusBerkas(); berkas = baru;
       sembunyiBanner(); tampilBerkas();
-    }catch(err){
-      console.error(err); tampilBanner('galat', 'Foto tidak dapat dibaca. Coba foto ulang atau gunakan PDF/JPG/PNG.');
-    }
+    }catch(err){ tampilBanner('galat', err.message || 'Berkas tidak dapat dibaca.'); }
   }
+  /* Tombol sesuai keadaan: belum ada foto KK -> Foto langsung + Pilih file; sudah ada -> Lihat KK + Ubah foto KK */
+  function aturModeKK(){
+    P('btnKamera').style.display = P('btnFile').style.display = adaKk ? 'none' : '';
+    P('btnLihat').style.display = P('btnUbah').style.display = adaKk ? '' : 'none';
+    P('bantuFile').textContent = adaKk
+      ? 'Foto KK sudah ada. "Ubah foto KK" akan menggantikan foto lama saat data disimpan. PDF, JPG, atau PNG, maks. 5 MB.'
+      : 'PDF, JPG, atau PNG. Maksimal 5 MB.';
+  }
+  P('btnLihat').addEventListener('click', () => { if (linkKk) bukaKK(linkKk); else toast('Tautan foto KK belum tersedia dari server.'); });
+  P('btnUbah').addEventListener('click', () => P('inFile').click());
   P('btnKamera').addEventListener('click', () => P('inKamera').click());
   P('btnFile').addEventListener('click', () => P('inFile').click());
   P('inKamera').addEventListener('change', e => { pilihBerkas(e.target.files[0]); e.target.value = ''; });
   P('inFile').addEventListener('change', e => { pilihBerkas(e.target.files[0]); e.target.value = ''; });
-
-  async function unggahBerkas(nkk){
-    const path = nkk + '/' + uuid() + '.' + berkas.ext;
-    const { error } = await db.storage.from(BUCKET_KK).upload(path, berkas.blob, { contentType: berkas.tipe, upsert: false });
-    if (error) throw error;
-    return path;
-  }
 
   /* ---------- Simpan ---------- */
   function validasi(){
@@ -4238,9 +4290,9 @@ function renderPendataan(isi){
 
     const nkk = hanyaAngka(P('nkk').value);
     const btn = P('btnSimpan'); btn.disabled = true; btn.textContent = 'Menyimpan…';
+    let pathKk = null, tersimpan = false;
     try{
-      let pathKk = null;
-      if (berkas){ btn.textContent = 'Mengunggah berkas KK…'; pathKk = await unggahBerkas(nkk); btn.textContent = 'Menyimpan…'; }
+      if (berkas){ btn.textContent = 'Mengunggah berkas KK…'; pathKk = await unggahBerkasKK(nkk, berkas); btn.textContent = 'Menyimpan…'; }
 
       const payload = {
         nik: hanyaAngka(P('nik').value), nkk,
@@ -4253,7 +4305,12 @@ function renderPendataan(isi){
       };
       const { data, error } = await db.rpc('tambah_warga_admin', { p_token: tokenSesi, p: payload });
       if (error) throw error;
-      if (!data.ok){ tampilBanner('galat', data.pesan); keAtas(); return; }
+      if (!data.ok){ if (pathKk) hapusBerkasKK(pathKk); tampilBanner('galat', data.pesan); keAtas(); return; }
+      tersimpan = true;
+      if (pathKk){                           // foto KK baru menggantikan yang lama: hapus berkas lama dari bucket
+        if (linkKk && linkKk !== pathKk) hapusBerkasKK(linkKk);
+        linkKk = pathKk; adaKk = true; aturModeKK();
+      }
       muatStatistik();                       // segarkan angka KK/Jiwa/Wafat & grafik di header beranda
       try{                                   // catat pernyataan persetujuan pemilik data (waktu + admin yang menginput)
         await db.rpc('catat_persetujuan_admin', { p_token: tokenSesi, p_nik: payload.nik });
@@ -4274,6 +4331,7 @@ function renderPendataan(isi){
       keAtas();
     }catch(err){
       console.error(err);
+      if (pathKk && !tersimpan) hapusBerkasKK(pathKk);
       tampilBanner('galat', berkas ? 'Gagal mengunggah atau menyimpan. Periksa koneksi lalu coba lagi.' : 'Tidak dapat menyimpan. Periksa koneksi lalu coba lagi.');
       keAtas();
     }finally{
@@ -4301,13 +4359,13 @@ function renderPendataan(isi){
   });
   P('btnKeluargaBaru').addEventListener('click', () => {
     kosongkan(['nkk','no_hp', ...FIELD_KELUARGA, ...FIELD_PRIBADI]);
-    hapusBerkas();
+    hapusBerkas(); linkKk = null; adaKk = false; aturModeKK();
     P('hitungNkk').textContent = '0'; statusNkk = 'kosong';
     sembunyiBanner(); kembaliKeForm();
     P('nkk').focus();
   });
 
-  aturKunci();
+  aturKunci(); aturModeKK();
   segarkanOtomatis();
 }
 
@@ -6764,7 +6822,17 @@ function dbTampilEdit(x, asal, semua, segarkan){
       const k = Object.keys(raw).find(r => alias.includes(dbNormKunci(r)));
       if (!k) return '';                                          // kolom belum ada di tabel warga: dilewati
       return fld(DB_LABEL_KELUARGA[j], dbInputKeluarga(j, k, raw[k]));
-    }).join('') + subjudul('Data Pribadi', 'fa-user');
+    }).join('') + (() => {
+      const nkkKel = x.nkk;
+      const tautan = raw.link_kk || (semua.find(m => m.raw && m.raw.link_kk && nkkKel && m.nkk === nkkKel) || { raw: {} }).raw.link_kk;
+      const tb = (aksi, ikon, teks, extra) => `<button type="button" class="pr-ed-add" data-kkaksi="${aksi}" ${extra || ''}><i class="fa-solid ${ikon}"></i> ${teks}</button>`;
+      return fld('Kartu Keluarga', `<div style="display:flex;gap:8px;flex-wrap:wrap">` + (tautan
+        ? tb('lihat', 'fa-file-lines', 'Lihat KK', `data-tautan="${esc(tautan)}"`) + tb('ubah', 'fa-camera-rotate', 'Ubah foto KK')
+        : tb('kamera', 'fa-camera', 'Foto langsung') + tb('file', 'fa-file-arrow-up', 'Pilih file')) +
+        `</div><input type="file" id="ekk_kamera" accept="image/*" capture="environment" hidden>` +
+        `<input type="file" id="ekk_file" accept="application/pdf,image/jpeg,image/png" hidden>` +
+        `<div id="ekk_info" style="font-size:.75rem;opacity:.75;margin-top:4px">${tautan ? 'Foto KK sudah ada. "Ubah foto KK" menggantikan foto lama.' : 'Foto KK belum pernah diunggah. PDF, JPG, atau PNG, maks. 5 MB.'}</div>`);
+    })() + subjudul('Data Pribadi', 'fa-user');
   const html = `<button type="button" class="pr-ed-add" data-mf="kembali" style="margin-bottom:12px"><i class="fa-solid fa-arrow-left"></i> Kembali ke Informasi Data</button>` +
     keluarga +
     fld('NIK (kunci data, tidak dapat diubah)', `<input type="text" class="dbk-mati" value="${esc(x.nik)}" disabled>`) +
@@ -6814,6 +6882,59 @@ function dbTampilEdit(x, asal, semua, segarkan){
     return { ok:true, tetap:true, pesan: anggota.length ? 'Data keluarga tersimpan untuk ' + (anggota.length + 1) + ' anggota.' : 'Data warga tersimpan.' };
   }, 'Simpan');
   mfNavFn = (aksi) => { if (aksi === 'kembali') dbTampilInfo(asal, semua, segarkan, false); };
+  if (kepalaKel) dbPasangKK(x, semua, segarkan);
+}
+/* Lihat KK / Ubah foto KK / unggah perdana di Modal Edit Data (Kepala Keluarga). Berjalan langsung, tidak menunggu tombol Simpan.
+   Foto baru menggantikan foto lama di semua anggota satu NKK, lalu berkas lama dihapus dari bucket. */
+function dbPasangKK(x, semua, segarkan){
+  const wadah = $('mfIsi').querySelector('[data-kkaksi]'); if (!wadah) return;
+  const baris = wadah.parentElement, info = $('ekk_info');
+  const anggotaKK = () => semua.filter(m => m.raw && x.nkk && m.nkk === x.nkk);
+  const tautanKini = () => x.raw.link_kk || (anggotaKK().find(m => m.raw.link_kk) || { raw: {} }).raw.link_kk || '';
+  const pilih = (id) => $(id).click();
+  function gambar(){
+    const t = tautanKini();
+    baris.innerHTML = t
+      ? `<button type="button" class="pr-ed-add" data-kkaksi="lihat"><i class="fa-solid fa-file-lines"></i> Lihat KK</button><button type="button" class="pr-ed-add" data-kkaksi="ubah"><i class="fa-solid fa-camera-rotate"></i> Ubah foto KK</button>`
+      : `<button type="button" class="pr-ed-add" data-kkaksi="kamera"><i class="fa-solid fa-camera"></i> Foto langsung</button><button type="button" class="pr-ed-add" data-kkaksi="file"><i class="fa-solid fa-file-arrow-up"></i> Pilih file</button>`;
+    info.textContent = t ? 'Foto KK sudah ada. "Ubah foto KK" menggantikan foto lama.' : 'Foto KK belum pernah diunggah. PDF, JPG, atau PNG, maks. 5 MB.';
+  }
+  async function proses(file){
+    if (!file) return;
+    if (!/^\d{16}$/.test(String(x.nkk || ''))){ toast('NKK keluarga ini belum valid (16 digit); perbaiki dulu sebelum mengunggah foto KK.'); return; }
+    const tombol = baris.querySelectorAll('button'); tombol.forEach(b => { b.disabled = true; });
+    info.textContent = 'Mengunggah foto KK…';
+    let baru = null, path = null, simpan = false;
+    try{
+      baru = await siapkanBerkasKK(file);
+      path = await unggahBerkasKK(x.nkk, baru);
+      const lama = new Set(anggotaKK().map(m => m.raw.link_kk).filter(Boolean));
+      const hasil = await Promise.all(anggotaKK().map(m => kirimRpc('update_warga', { nik: m.nik, data: { link_kk: path } })));
+      const ok = hasil.filter(h => h && h.ok).length;
+      if (!ok){ throw new Error((hasil[0] && hasil[0].pesan) || 'Gagal menyimpan tautan foto KK.'); }
+      simpan = true;
+      anggotaKK().forEach((m, i) => { if (hasil[i] && hasil[i].ok) dbTerapkanRaw(m, hasil[i].row || Object.assign({}, m.raw, { link_kk: path })); });
+      lama.forEach(l => { if (l !== path) hapusBerkasKK(l); });          // foto lama diganti: hapus dari bucket
+      if (segarkan) segarkan();
+      toast(ok < hasil.length ? 'Foto KK diperbarui, tetapi sebagian anggota gagal diperbarui.' : 'Foto KK berhasil disimpan.');
+    }catch(err){
+      console.error(err);
+      if (path && !simpan) hapusBerkasKK(path);
+      toast(err && err.message ? err.message : 'Gagal mengunggah foto KK. Periksa koneksi.');
+    }finally{
+      if (baru && baru.pratinjau) URL.revokeObjectURL(baru.pratinjau);
+      gambar();
+    }
+  }
+  $('mfIsi').querySelector('[data-kkaksi]').closest('.mf-field').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-kkaksi]'); if (!b || b.disabled) return;
+    const a = b.dataset.kkaksi;
+    if (a === 'lihat'){ const t = tautanKini(); if (t) bukaKK(t); }
+    else if (a === 'kamera') pilih('ekk_kamera');
+    else pilih('ekk_file');                      // 'file' dan 'ubah'
+  });
+  ['ekk_kamera', 'ekk_file'].forEach(id => $(id).addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; proses(f); }));
+  gambar();
 }
 function dbModalInfo(w, semua, segarkan){
   if (!w) return;

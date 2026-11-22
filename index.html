@@ -2204,20 +2204,21 @@ async function periksaAdminAwal(){
   }
 }
 /* Kelurahan per kecamatan di Kota Kendari (11 kecamatan, 65 kelurahan).
-   Sumber: Daftar Alamat PPS KPU Kota Kendari (Pengumuman No. 1749/PP.04.1-Pu/7471/2023), cocok dengan data resmi 65 kelurahan.
+   Sumber: Peraturan Wali Kota Kendari Nomor 29 Tahun 2025 tentang Susunan Organisasi dan Tata Kerja Kecamatan dan Kelurahan,
+   Pasal 3 ayat (3): urutan dan penulisan nama sesuai peraturan tersebut.
    Kunci = nama kecamatan tanpa spasi/tanda baca/huruf besar (dicocokkan ke nama kecamatan dari server). */
 const KELURAHAN_KENDARI = {
-  abeli: ['Abeli','Anggalomelai','Benua Nirae','Lapulu','Poasia','Puday','Talia'],
-  baruga: ['Baruga','Lepo-Lepo','Watubangga','Wundudopi'],
-  kadia: ['Anaiwoi','Bende','Kadia','Pondambea','Wowawanggu'],
-  kambu: ['Kambu','Lalolara','Mokoau','Padaleu'],
-  kendari: ['Gunung Jati','Jati Mekar','Kampung Salo','Kandai','Kessilampe','Kendari Caddi','Mangga Dua','Mata','Purirano'],
-  kendaribarat: ['Benu-Benua','Dapu-Dapura','Kemaraya','Lahundape','Punggaloba','Sanua','Sodohoa','Tipulu','Watu-Watu'],
-  mandonga: ['Alolama','Anggilowu','Korumba','Labibia','Mandonga','Wawombalata'],
-  nambo: ['Bungkutoko','Nambo','Petoaha','Sambuli','Tobimeita','Tondonggeu'],
-  poasia: ['Anduonohu','Anggoeya','Matabubu','Rahandouna','Wundumbatu'],
-  puuwatu: ['Abeli Dalam','Lalodati','Punggolaka','Puuwatu','Tobuuha','Watulondo'],
-  wuawua: ['Anawai','Bonggoeya','Mataiwoi','Wua-Wua']
+  kendari: ['Kandai','Kendari Caddi','Gunung Jati','Kampung Salo','Mangga Dua','Kessilampe','Mata','Purirano','Jati Mekar'],
+  kendaribarat: ['Kemaraya','Watu-Watu','Tipulu','Punggaloba','Benu-Benua','Sodohoa','Dapu-Dapura','Sanua','Lahundape'],
+  mandonga: ['Mandonga','Korumba','Alolama','Anggilowu','Wawombalata','Labibia'],
+  puuwatu: ['Puuwatu','Abeli Dalam','Watulondo','Punggolaka','Tobuuha','Lalodati'],
+  kadia: ['Kadia','Bende','Anaiwoi','Pondambea','Wawowanggu'],
+  wuawua: ['Wua-Wua','Bonggoeya','Mataiwoi','Anawai'],
+  baruga: ['Lepo-Lepo','Baruga','Watubangga','Wundudopi'],
+  kambu: ['Kambu','Padaleu','Mokoau','Lalolara'],
+  poasia: ['Anduonohu','Anggoeya','Rahandouna','Matabubu','Wundumbatu'],
+  abeli: ['Abeli','Lapulu','Pudai','Talia','Benua Nirae','Poasia','Anggalolemelai'],
+  nambo: ['Nambo','Petoaha','Tobimeita','Bungkutoko','Sambuli','Tondonggeu']
 };
 const kunciKecamatan = (t) => String(t || '').toLowerCase().replace(/[^a-z]/g, '');
 /* Pilihan kelurahan mengikuti kecamatan yang dipilih; sebelum kecamatan dipilih kelurahan nonaktif.

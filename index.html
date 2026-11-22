@@ -722,15 +722,6 @@
   #mfForm{display:flex;flex-direction:column;min-height:0;flex:1}
   .mf-isi{padding:4px 18px 8px;overflow-y:auto;flex:1}
   .mf-field{margin-bottom:12px}
-  .dbk-kk-tombol{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .dbk-kk-btn{padding:10px 8px;border:1.5px dashed var(--biru-muda);border-radius:10px;background:#f4f9ff;color:var(--biru-tua);
-    font:inherit;font-size:.78rem;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
-  .dbk-kk-info{display:none;margin-top:8px;align-items:center;gap:10px;padding:8px;border:1.5px solid var(--garis);border-radius:10px}
-  .dbk-kk-info.ada{display:flex}
-  .dbk-kk-info .dbk-kk-nama{flex:1;min-width:0;font-size:.75rem;color:var(--abu);line-height:1.4}
-  .dbk-kk-info .dbk-kk-nama b{display:block;color:var(--teks);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dbk-kk-info button{flex:none;width:30px;height:30px;border:0;border-radius:50%;background:#f1f5f9;color:var(--abu);font-size:1rem;cursor:pointer}
-  .dbk-kk-bantu{font-size:.7rem;color:var(--abu);margin-top:6px}
   .mf-field label{display:block;font-size:.72rem;font-weight:500;color:var(--abu);margin-bottom:4px}
   .mf-field label b{color:#e53935}
   .mf-field input,.mf-field select,.mf-field textarea{width:100%;font:inherit;font-size:.86rem;color:var(--teks);background:#f8fafc;
@@ -3877,82 +3868,6 @@ function setIkonHeader(jk){
    RPC (khusus Admin, memakai token sesi): cari_keluarga, tambah_warga_admin (file SQL 01); berkas KK -> bucket privat "kk".
    Hasil input langsung masuk ke tabel warga (master data).
    ===================================================================== */
-/* ---------- Berkas KK: pembantu bersama (Pendataan + Modal Edit Data) ----------
-   Bucket privat "kk"; kolom link_kk berisi path (NKK/uuid.ext) atau tautan lama (https://...).
-   Mengganti KK: berkas baru diunggah dulu, ganti_kk mengarahkan link_kk seluruh anggota satu NKK ke berkas baru,
-   baru berkas lama dihapus dari bucket. Butuh 18_ganti_kk.sql di Supabase. */
-const KK_BUCKET = 'kk', KK_MAKS = 5 * 1024 * 1024;
-const kkPathStorage = (p) => !!p && !/^https?:\/\//i.test(String(p));
-function kkUuid(){
-  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map(x => x.toString(16).padStart(2,'0')).join('');
-  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
-}
-function kkKompres(file){
-  return new Promise((ok, gagal) => {
-    const url = URL.createObjectURL(file), img = new Image();
-    img.onload = () => {
-      const skala = Math.min(1, 1800 / Math.max(img.width, img.height));
-      const w = Math.round(img.width * skala), h = Math.round(img.height * skala);
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
-      c.toBlob(b => { URL.revokeObjectURL(url); b ? ok(b) : gagal(new Error('gagal')); }, 'image/jpeg', 0.82);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); gagal(new Error('tidak terbaca')); };
-    img.src = url;
-  });
-}
-/* File pilihan -> { blob, tipe, ext, nama, ukuran }; galat dilempar sebagai Error(pesan) */
-async function kkSiapkan(file){
-  if (file.type === 'application/pdf'){
-    if (file.size > KK_MAKS) throw new Error('Ukuran PDF maksimal 5 MB.');
-    return { blob: file, tipe: 'application/pdf', ext: 'pdf', nama: file.name, ukuran: file.size };
-  }
-  if (file.type.startsWith('image/')){
-    let blob; try{ blob = await kkKompres(file); }catch(e){ throw new Error('Foto tidak dapat dibaca. Coba foto ulang atau gunakan PDF/JPG/PNG.'); }
-    if (blob.size > KK_MAKS) throw new Error('Ukuran foto terlalu besar.');
-    return { blob, tipe: 'image/jpeg', ext: 'jpg', nama: file.name || 'foto-kk.jpg', ukuran: blob.size };
-  }
-  throw new Error('Format berkas harus PDF, JPG, atau PNG.');
-}
-async function kkUnggah(nkk, b){
-  const path = nkk + '/' + kkUuid() + '.' + b.ext;
-  const { error } = await db.storage.from(KK_BUCKET).upload(path, b.blob, { contentType: b.tipe, upsert: false });
-  if (error) throw error;
-  return path;
-}
-/* Hapus berkas dari bucket. Butuh kebijakan DELETE (18_ganti_kk.sql): hanya Admin (header x-sesi) dan hanya berkas yang tidak dipakai lagi.
-   true bila terhapus (atau memang bukan berkas bucket); false bila gagal / tidak diizinkan */
-async function kkHapus(path){
-  if (!kkPathStorage(path)) return true;
-  try{
-    const { data, error } = await dbSesi().storage.from(KK_BUCKET).remove([path]);
-    if (!error && data && data.length) return true;
-  }catch(e){ console.error(e); }
-  console.error('Berkas KK tidak terhapus dari bucket (jalankan 18_ganti_kk.sql):', path);
-  return false;
-}
-/* Path KK yang sedang dipakai satu NKK (info_kk, 18_ganti_kk.sql) */
-async function kkAmbilLinkKeluarga(nkk){
-  const { data, error } = await db.rpc('info_kk', { p_token: tokenSesi, p_nkk: nkk });
-  if (error) throw error;
-  if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat berkas KK.');
-  return { path: String(data.path || '').trim() };
-}
-/* link_kk seluruh anggota satu NKK diarahkan ke berkas baru (ganti_kk), lalu berkas lama dihapus dari bucket */
-async function kkGantiKeluarga(nkk, lama, baru){
-  const { data, error } = await db.rpc('ganti_kk', { p_token: tokenSesi, p_nkk: nkk, p_path: baru });
-  if (error) throw error;
-  if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal mengganti foto KK.');
-  let terhapus = true;
-  for (const pt of new Set([lama].concat(data.lama || []))){
-    if (pt && pt !== baru && kkPathStorage(pt) && !(await kkHapus(pt))) terhapus = false;
-  }
-  return { terhapus };
-}
-
 function renderPendataan(isi){
   if (!db){ isi.innerHTML = '<div class="kosong"><i class="fa-solid fa-plug-circle-xmark"></i> Aplikasi belum dihubungkan ke database.</div>'; return; }
   isi.innerHTML = `<div class="pd">
@@ -4117,7 +4032,6 @@ function renderPendataan(isi){
      kosong | baru | perlu_verifikasi | tanpa_telp | terverifikasi */
   let statusNkk = 'kosong';
   let berkas = null;                       // { blob, tipe, ext, nama, ukuran, pratinjau }
-  let kkAda = null;                        // null = KK belum pernah diunggah; { path } = sudah ada (path null = belum dicari)
 
   const FIELD_KELUARGA = ['nama_kk','alamat','status_tinggal','email'];
   const FIELD_PRIBADI  = ['nik','nama_lengkap','jender','hubungan','tempat_lahir','tgl_lahir','agama','status',
@@ -4187,7 +4101,6 @@ function renderPendataan(isi){
     P('kartuPemilu').classList.toggle('pd-terkunci', kunci);
     P('btnSimpan').disabled = kunci;
     P('btnVerifikasi').style.display = statusNkk === 'perlu_verifikasi' ? 'block' : 'none';
-    aturTombolKk();
   }
   function kosongkanOtomatis(){
     FIELD_KELUARGA.forEach(f => { if (P(f).classList.contains('pd-terisi-otomatis')){ P(f).value = ''; P(f).classList.remove('pd-terisi-otomatis'); } });
@@ -4204,7 +4117,6 @@ function renderPendataan(isi){
       const { data, error } = await db.rpc('cari_keluarga', { p_token: tokenSesi, p_nkk: nkk, p_telp: denganTelp ? P('no_hp').value : '' });
       if (error) throw error;
       if (nkk !== hanyaAngka(P('nkk').value)) return;          // NKK diubah saat menunggu
-      kkAda = (data.status === 'terverifikasi' && data.ada_berkas_kk) ? { path: null } : null;
 
       if (data.status === 'baru'){
         setStatus('baru');
@@ -4219,12 +4131,11 @@ function renderPendataan(isi){
           tampilBanner('baru', 'NKK sudah terdaftar. Masukkan No. HP yang terdaftar pada keluarga ini, lalu tekan Verifikasi untuk menambah anggota.');
       } else if (data.status === 'terverifikasi'){
         setStatus('terverifikasi');
-        if (kkAda) pastikanPathKk().catch(() => {});             // cari path KK di latar belakang agar "Lihat KK" langsung terbuka
         FIELD_KELUARGA.forEach(f => {
           if (data[f] && !P(f).value){ P(f).value = data[f]; P(f).classList.add('pd-terisi-otomatis'); }
         });
         tampilBanner('ok', 'Terverifikasi (' + data.jumlah + ' anggota terdaftar). Data keluarga terisi otomatis' +
-          (data.ada_berkas_kk ? ', berkas KK sudah ada (gunakan Ubah foto KK bila ingin mengganti)' : '') +
+          (data.ada_berkas_kk ? ', berkas KK sudah ada (unggah lagi hanya bila ingin mengganti)' : '') +
           '. Cukup isi data anggota yang ditambahkan.');
         segarkanOtomatis();
       } else if (!data.ok){
@@ -4242,7 +4153,7 @@ function renderPendataan(isi){
     e.target.value = hanyaAngka(e.target.value).slice(0,16);
     P('hitungNkk').textContent = e.target.value.length;
     kosongkanOtomatis(); sembunyiBanner();
-    statusNkk = 'kosong'; kkAda = null; aturKunci();
+    statusNkk = 'kosong'; aturKunci();
     if (e.target.value.length === 16) cekNkk(false);
   });
   P('no_hp').addEventListener('input', () => {
@@ -4332,31 +4243,8 @@ function renderPendataan(isi){
       console.error(err); tampilBanner('galat', 'Foto tidak dapat dibaca. Coba foto ulang atau gunakan PDF/JPG/PNG.');
     }
   }
-  /* Tombol KK: belum pernah diunggah -> "Foto langsung" + "Pilih file"; sudah pernah -> "Ubah foto KK" + "Lihat KK" */
-  function aturTombolKk(){
-    const ada = !!kkAda;
-    P('btnKamera').innerHTML = ada ? '<i class="fa-solid fa-camera-rotate"></i> Ubah foto KK' : '<i class="fa-solid fa-camera"></i> Foto langsung';
-    P('btnFile').innerHTML = ada ? '<i class="fa-solid fa-eye"></i> Lihat KK' : '<i class="fa-solid fa-file-arrow-up"></i> Pilih file';
-    P('bantuFile').textContent = ada ? 'KK sudah pernah diunggah. Ubah foto KK akan menggantikan berkas lama saat disimpan. PDF, JPG, atau PNG, maks. 5 MB.'
-                                     : 'PDF, JPG, atau PNG. Maksimal 5 MB.';
-  }
-  async function pastikanPathKk(){
-    if (!kkAda) return '';
-    if (kkAda.path === null){
-      const r = await kkAmbilLinkKeluarga(hanyaAngka(P('nkk').value));
-      if (kkAda) kkAda.path = r.path;
-    }
-    return kkAda ? kkAda.path : '';
-  }
-  P('btnKamera').addEventListener('click', () => (kkAda ? P('inFile') : P('inKamera')).click());   // Ubah foto KK: pilih kamera atau galeri/file
-  P('btnFile').addEventListener('click', async () => {
-    if (!kkAda) return P('inFile').click();
-    if (kkAda.path) return bukaKK(kkAda.path);                  // sinkron agar jendela baru tidak diblokir browser
-    const t = P('btnFile'); t.disabled = true;
-    try{ const pt = await pastikanPathKk(); if (pt) bukaKK(pt); else toast('Berkas KK tidak ditemukan.'); }
-    catch(e){ console.error(e); toast('Berkas KK tidak dapat dimuat.'); }
-    finally{ t.disabled = false; }
-  });
+  P('btnKamera').addEventListener('click', () => P('inKamera').click());
+  P('btnFile').addEventListener('click', () => P('inFile').click());
   P('inKamera').addEventListener('change', e => { pilihBerkas(e.target.files[0]); e.target.value = ''; });
   P('inFile').addEventListener('change', e => { pilihBerkas(e.target.files[0]); e.target.value = ''; });
 
@@ -4387,12 +4275,9 @@ function renderPendataan(isi){
 
     const nkk = hanyaAngka(P('nkk').value);
     const btn = P('btnSimpan'); btn.disabled = true; btn.textContent = 'Menyimpan…';
-    let pathKk = null, lamaKk = '', tersimpan = false;
     try{
-      if (berkas){
-        if (kkAda){ try{ lamaKk = (await pastikanPathKk()) || ''; }catch(e){ console.error(e); } }   // path KK lama, untuk dihapus setelah berhasil
-        btn.textContent = 'Mengunggah berkas KK…'; pathKk = await unggahBerkas(nkk); btn.textContent = 'Menyimpan…';
-      }
+      let pathKk = null;
+      if (berkas){ btn.textContent = 'Mengunggah berkas KK…'; pathKk = await unggahBerkas(nkk); btn.textContent = 'Menyimpan…'; }
 
       const payload = {
         nik: hanyaAngka(P('nik').value), nkk,
@@ -4405,16 +4290,7 @@ function renderPendataan(isi){
       };
       const { data, error } = await db.rpc('tambah_warga_admin', { p_token: tokenSesi, p: payload });
       if (error) throw error;
-      if (!data.ok){ if (pathKk) await kkHapus(pathKk); tampilBanner('galat', data.pesan); keAtas(); return; }
-      tersimpan = true;
-      let infoKk = '';
-      if (pathKk){                           // samakan link_kk satu NKK ke berkas baru, lalu hapus berkas KK lama dari bucket
-        try{
-          const g = await kkGantiKeluarga(nkk, lamaKk, pathKk);
-          if (!g.terhapus) infoKk = 'Catatan: berkas KK lama belum dapat dihapus dari penyimpanan.';
-        }catch(e){ console.error(e); infoKk = 'Catatan: berkas KK lama belum dapat diganti seluruhnya.'; }
-        kkAda = { path: pathKk };
-      }
+      if (!data.ok){ tampilBanner('galat', data.pesan); keAtas(); return; }
       muatStatistik();                       // segarkan angka KK/Jiwa/Wafat & grafik di header beranda
       try{                                   // catat pernyataan persetujuan pemilik data (waktu + admin yang menginput)
         await db.rpc('catat_persetujuan_admin', { p_token: tokenSesi, p_nik: payload.nik });
@@ -4430,13 +4306,11 @@ function renderPendataan(isi){
       baris(' (urutan ke-' + data.no_urut + ')', data.nama_asli);
       baris('Usia ' + (data.usia ?? '-') + ' tahun · ' + data.status_pemilu);
       baris('KK: ' + (data.nama_kk || '-'));
-      if (infoKk) baris(infoKk);
       P('form').style.display = 'none';
       P('kartuSukses').classList.add('pd-tampil');
       keAtas();
     }catch(err){
       console.error(err);
-      if (pathKk && !tersimpan) kkHapus(pathKk);               // data gagal tersimpan: buang berkas yang terlanjur diunggah
       tampilBanner('galat', berkas ? 'Gagal mengunggah atau menyimpan. Periksa koneksi lalu coba lagi.' : 'Tidak dapat menyimpan. Periksa koneksi lalu coba lagi.');
       keAtas();
     }finally{
@@ -4464,7 +4338,7 @@ function renderPendataan(isi){
   });
   P('btnKeluargaBaru').addEventListener('click', () => {
     kosongkan(['nkk','no_hp', ...FIELD_KELUARGA, ...FIELD_PRIBADI]);
-    hapusBerkas(); kkAda = null;
+    hapusBerkas();
     P('hitungNkk').textContent = '0'; statusNkk = 'kosong';
     sembunyiBanner(); kembaliKeForm();
     P('nkk').focus();
@@ -6370,7 +6244,7 @@ async function bukaKK(path){
     const { data, error } = await dbSesi().storage.from('kk').createSignedUrl(path, 120);
     if (error || !data) throw error || new Error('tanpa tautan');
     if (w) w.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
-  }catch(e){ console.error(e); if (w) w.close(); toast('Arsip KK tidak dapat dibuka' + (e && e.message ? ' (' + e.message + ')' : '.')); }
+  }catch(e){ console.error(e); if (w) w.close(); toast('Arsip KK tidak dapat dibuka.'); }
 }
 
 const JK_LABEL = { L:'Laki-laki', P:'Perempuan' };
@@ -6872,40 +6746,6 @@ function dbInputKeluarga(j, k, v){
   if (j === 'alamat') return `<textarea ${aw}>${esc(nilai)}</textarea>`;
   return `<input type="text" ${aw} value="${esc(nilai)}">`;
 }
-/* Blok Foto KK di Data Keluarga (hanya Kepala Keluarga): belum ada -> Foto langsung + Pilih file; sudah ada -> Ubah foto KK + Lihat KK */
-const dbKkBlok = (ada) => fld('Foto KK (Kartu Keluarga)',
-  '<div class="dbk-kk"><div class="dbk-kk-tombol">' + (ada
-    ? '<button type="button" class="dbk-kk-btn" data-kk-aksi="ubah"><i class="fa-solid fa-camera-rotate"></i> Ubah foto KK</button>' +
-      '<button type="button" class="dbk-kk-btn" data-kk-aksi="lihat"><i class="fa-solid fa-eye"></i> Lihat KK</button>'
-    : '<button type="button" class="dbk-kk-btn" data-kk-aksi="kamera"><i class="fa-solid fa-camera"></i> Foto langsung</button>' +
-      '<button type="button" class="dbk-kk-btn" data-kk-aksi="file"><i class="fa-solid fa-file-arrow-up"></i> Pilih file</button>') +
-  '</div><input type="file" data-kk-in="kamera" accept="image/*" capture="environment" hidden>' +
-  '<input type="file" data-kk-in="file" accept="application/pdf,image/jpeg,image/png" hidden>' +
-  '<div class="dbk-kk-info" data-kk-info></div>' +
-  '<div class="dbk-kk-bantu">' + (ada ? 'Ubah foto KK menggantikan berkas lama saat Simpan. ' : '') + 'PDF, JPG, atau PNG, maks. 5 MB.</div></div>');
-function dbPasangKk(lama, setBerkas){
-  const isi = $('mfIsi'), info = isi.querySelector('[data-kk-info]');
-  if (!info) return;
-  const tampil = (b) => {
-    setBerkas(b); info.replaceChildren(); info.className = 'dbk-kk-info ada';
-    const t = document.createElement('div'); t.className = 'dbk-kk-nama';
-    const bt = document.createElement('b'); bt.textContent = b.nama;
-    t.appendChild(bt);
-    t.appendChild(document.createTextNode(Math.max(1, Math.round(b.ukuran / 1024)) + ' KB · ' + (lama ? 'menggantikan KK lama saat Simpan' : 'diunggah saat Simpan')));
-    const x = document.createElement('button'); x.type = 'button'; x.setAttribute('aria-label', 'Batalkan'); x.textContent = '×';
-    x.addEventListener('click', () => { setBerkas(null); info.replaceChildren(); info.className = 'dbk-kk-info'; });
-    info.appendChild(t); info.appendChild(x);
-  };
-  isi.querySelectorAll('[data-kk-aksi]').forEach(btn => btn.addEventListener('click', () => {
-    const a = btn.dataset.kkAksi;
-    if (a === 'lihat') return bukaKK(lama);
-    isi.querySelector('[data-kk-in="' + (a === 'kamera' ? 'kamera' : 'file') + '"]').click();   // Ubah foto KK: kamera atau galeri/file
-  }));
-  isi.querySelectorAll('[data-kk-in]').forEach(el => el.addEventListener('change', async () => {
-    const f = el.files[0]; el.value = ''; if (!f) return;
-    try{ tampil(await kkSiapkan(f)); }catch(e){ toast(e.message); }
-  }));
-}
 const OPSI_AGAMA = ['Islam', 'Kristen', 'Hindu', 'Budha'];   // pilihan Agama di Modal Edit Data
 function dbInputKolom(k, v){
   const aw = (x) => `data-wk="${esc(k)}" data-awal="${esc(x)}"`;
@@ -6948,9 +6788,6 @@ function dbTampilInfo(w, semua, segarkan, baru){
 function dbTampilEdit(x, asal, semua, segarkan){
   const raw = x.raw;
   const kepalaKel = /kepala/i.test(x.hubungan);                  // hanya Kepala Keluarga yang menampilkan Data Keluarga
-  let kkBaru = null;                                             // foto KK baru yang dipilih (diunggah saat Simpan)
-  const kkLama = !kepalaKel ? '' : ([x].concat(semua.filter(m => m !== x && m.nkk && m.nkk === x.nkk))
-    .map(m => String((m.raw && m.raw.link_kk) || '').trim()).find(Boolean) || '');
   const kelNorm = new Set(DB_KELUARGA.flatMap(d => d[1]));
   const kunci = Object.keys(raw).filter(k => !DB_SEMBUNYI_KOLOM.test(k) && !DB_KUNCI_SEMBUNYI.has(dbNormKunci(k)) && !kelNorm.has(dbNormKunci(k)));
   kunci.sort((a, b) => {
@@ -6964,7 +6801,7 @@ function dbTampilEdit(x, asal, semua, segarkan){
       const k = Object.keys(raw).find(r => alias.includes(dbNormKunci(r)));
       if (!k) return '';                                          // kolom belum ada di tabel warga: dilewati
       return fld(DB_LABEL_KELUARGA[j], dbInputKeluarga(j, k, raw[k]));
-    }).join('') + dbKkBlok(kkLama) + subjudul('Data Pribadi', 'fa-user');
+    }).join('') + subjudul('Data Pribadi', 'fa-user');
   const html = `<button type="button" class="pr-ed-add" data-mf="kembali" style="margin-bottom:12px"><i class="fa-solid fa-arrow-left"></i> Kembali ke Informasi Data</button>` +
     keluarga +
     fld('NIK (kunci data, tidak dapat diubah)', `<input type="text" class="dbk-mati" value="${esc(x.nik)}" disabled>`) +
@@ -6985,7 +6822,7 @@ function dbTampilEdit(x, asal, semua, segarkan){
       data[k] = nilai;
       if (el.dataset.kel) dataKel[k] = nilai;                    // item Data Keluarga: diteruskan ke anggota lain
     }
-    if (!Object.keys(data).length && !kkBaru) return { ok:false, pesan:'Tidak ada perubahan.' };
+    if (!Object.keys(data).length) return { ok:false, pesan:'Tidak ada perubahan.' };
     const kNkk = Object.keys(dataKel).find(k => /^(nkk|nokk)$/i.test(dbNormKunci(k)));
     if (kNkk){
       const nb = dataKel[kNkk];
@@ -6994,18 +6831,9 @@ function dbTampilEdit(x, asal, semua, segarkan){
     }
     const nkkLama = x.nkk;
     const anggota = (kepalaKel && Object.keys(dataKel).length && nkkLama) ? semua.filter(m => m !== x && m.nik && m.nkk === nkkLama) : [];
-    const nkkTujuan = String((kNkk ? dataKel[kNkk] : x.nkk) || '').replace(/\D/g, '');
-    let pathKk = null;
-    if (kkBaru){                                                 // unggah dulu; bila data gagal disimpan berkas ini dibuang lagi
-      if (nkkTujuan.length !== 16) return { ok:false, pesan:'NKK harus 16 digit angka sebelum foto KK dapat diunggah.' };
-      try{ pathKk = await kkUnggah(nkkTujuan, kkBaru); }
-      catch(e){ console.error(e); return { ok:false, pesan:'Foto KK gagal diunggah. Periksa koneksi lalu coba lagi.' }; }
-    }
-    if (Object.keys(data).length){
-      const r = await kirimRpc('update_warga', { nik: x.nik, data });
-      if (!r || !r.ok){ if (pathKk) await kkHapus(pathKk); return r || { ok:false, pesan:'Gagal menyimpan.' }; }
-      dbTerapkanRaw(x, r.row || Object.assign({}, raw, data));
-    }
+    const r = await kirimRpc('update_warga', { nik: x.nik, data });
+    if (!r || !r.ok) return r || { ok:false, pesan:'Gagal menyimpan.' };
+    dbTerapkanRaw(x, r.row || Object.assign({}, raw, data));
     /* Perubahan Data Keluarga ikut diterapkan ke semua anggota keluarga lainnya (satu NKK) */
     let gagal = 0;
     if (anggota.length){
@@ -7016,28 +6844,13 @@ function dbTampilEdit(x, asal, semua, segarkan){
         else gagal++;
       });
     }
-    /* Foto KK baru: link_kk seluruh anggota satu NKK diarahkan ke berkas baru, lalu berkas lama dihapus dari bucket */
-    let infoKk = '';
-    if (pathKk){
-      let g = null;
-      try{ g = await kkGantiKeluarga(nkkTujuan, kkLama, pathKk); }catch(e){ console.error(e); }
-      if (!g){
-        await kkHapus(pathKk);
-        if (!Object.keys(data).length) return { ok:false, pesan:'Foto KK gagal disimpan. Coba lagi.' };
-        infoKk = ' Foto KK gagal disimpan, silakan coba lagi.';
-      } else {
-        semua.filter(m => m.raw && m.nkk === nkkTujuan).forEach(m => dbTerapkanRaw(m, Object.assign({}, m.raw, { link_kk: pathKk })));
-        infoKk = g.terhapus ? ' Foto KK diganti.' : ' Foto KK diganti (berkas lama belum terhapus dari penyimpanan).';
-      }
-    }
     dbHitungOpsi(semua);
     if (segarkan) segarkan();
     dbTampilInfo(asal, semua, segarkan, false);
-    if (gagal) return { ok:true, tetap:true, pesan:'Data tersimpan, tetapi ' + gagal + ' anggota keluarga gagal diperbarui. Coba simpan ulang.' + infoKk };
-    return { ok:true, tetap:true, pesan: (anggota.length ? 'Data keluarga tersimpan untuk ' + (anggota.length + 1) + ' anggota.' : 'Data warga tersimpan.') + infoKk };
+    if (gagal) return { ok:true, tetap:true, pesan:'Data tersimpan, tetapi ' + gagal + ' anggota keluarga gagal diperbarui. Coba simpan ulang.' };
+    return { ok:true, tetap:true, pesan: anggota.length ? 'Data keluarga tersimpan untuk ' + (anggota.length + 1) + ' anggota.' : 'Data warga tersimpan.' };
   }, 'Simpan');
   mfNavFn = (aksi) => { if (aksi === 'kembali') dbTampilInfo(asal, semua, segarkan, false); };
-  if (kepalaKel) dbPasangKk(kkLama, (b) => { kkBaru = b; });
 }
 function dbModalInfo(w, semua, segarkan){
   if (!w) return;

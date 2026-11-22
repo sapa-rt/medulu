@@ -6370,7 +6370,7 @@ async function bukaKK(path){
     const { data, error } = await dbSesi().storage.from('kk').createSignedUrl(path, 120);
     if (error || !data) throw error || new Error('tanpa tautan');
     if (w) w.location.href = data.signedUrl; else window.open(data.signedUrl, '_blank');
-  }catch(e){ console.error(e); if (w) w.close(); toast('Arsip KK tidak dapat dibuka.'); }
+  }catch(e){ console.error(e); if (w) w.close(); toast('Arsip KK tidak dapat dibuka' + (e && e.message ? ' (' + e.message + ')' : '.')); }
 }
 
 const JK_LABEL = { L:'Laki-laki', P:'Perempuan' };

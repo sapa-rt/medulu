@@ -6994,6 +6994,7 @@ async function renderFormSurat(isi){
       pesan.innerHTML = `<div class="pesan-ok"><i class="fa-solid fa-circle-check"></i> ${esc(r.pesan)}</div>`;
       form.reset(); $('isianSurat').innerHTML = ''; aturBoxNik('');
       muatStatistik();
+      kabarkanPengajuanKeEmailAdmin();
     } else {
       pesan.innerHTML = `<div class="pesan-err"><i class="fa-solid fa-circle-exclamation"></i> ${esc(r.pesan || 'Terjadi kesalahan pada sistem.')}</div>`;
     }
@@ -7028,6 +7029,13 @@ const LABEL_DATA = {
 };
 const ORDER_DATA = Object.keys(LABEL_DATA);
 const linkAman = (u) => /^https?:\/\//i.test(u || '') ? u : '';
+
+/* Email pemberitahuan ke Admin (utama + cadangan) saat ada pengajuan baru; dikirim Apps Script, kegagalannya tidak memengaruhi pengajuan */
+function kabarkanPengajuanKeEmailAdmin(){
+  if (typeof URL_PERSETUJUAN === 'undefined' || !URL_PERSETUJUAN) return;
+  fetch(URL_PERSETUJUAN, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ aksi:'notif_pengajuan', token: tokenSesi }) }).catch(e => console.error(e));
+}
 
 /* ----- Status pengajuan ----- */
 const STATUS_LABEL = { Diajukan:'Proses persetujuan', Disetujui:'Disetujui' };

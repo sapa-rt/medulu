@@ -6896,7 +6896,7 @@ const daftarJenisSurat = () => adminSurat ? JENIS_SURAT.concat(JENIS_SURAT_ADMIN
 let modeManualAdmin = false;
 const manualAktif = () => !!(modeManualAdmin && adminSurat);
 const isianTglManual = () => manualAktif() ? fs('Tanggal Surat (Manual)', 'fa-calendar-days', inp('tgl_surat','date')) : '';
-const isianNikManual = () => fs('NIK Pemohon (Warga)', 'fa-id-card-clip', inpNik('nik_pengaju','16 digit NIK warga pemohon'));   // tampil di posisi NIK Admin
+const isianNikManual = () => fs('NIK Warga', 'fa-id-card-clip', inpNik('nik_pengaju','16 digit NIK warga pemohon'));   // tampil di posisi NIK Admin
 const fs = (label, ikon, html) => `<div class="mf-field"><label><i class="fa-solid ${ikon}"></i>${label}</label>${html}</div>`;
 const inp = (nama, tipe, ph) => `<input name="${nama}" type="${tipe}" ${ph ? `placeholder="${ph}"` : ''} required>`;
 const opsiManual = (nama, manual, daftar, ph) =>

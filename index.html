@@ -1297,6 +1297,14 @@
   /* Pengajuan Surat Pengantar: NIK Pemohon (rata kiri) + Jenis Surat sebaris; isian di bawahnya 3 kolom */
   #formSurat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;align-items:start}
   #formSurat #boxNikPemohon{margin:0 0 12px;text-align:left}
+  /* tombol Input manual (khusus Admin), kanan atas sebaris NIK */
+  #formSurat .baris-nik-manual{display:flex;align-items:flex-start;gap:10px}
+  .sw-manual{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:.72rem;font-weight:600;color:var(--teks);cursor:pointer;white-space:nowrap}
+  .sw-manual input{display:none}
+  .sw-manual .rel{width:38px;height:22px;border-radius:11px;background:#cbd5e1;position:relative;transition:background .2s;flex:none}
+  .sw-manual .rel::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .sw-manual input:checked + .rel{background:#16a34a}
+  .sw-manual input:checked + .rel::after{left:18px}
   #formSurat #boxNikPemohon .baris{justify-content:flex-start}
   #formSurat #isianSurat{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;align-items:start}
   #formSurat #isianSurat > *{min-width:0}
@@ -6877,10 +6885,13 @@ const JENIS_SURAT = [
 ];
 const JENIS_SURAT_ADMIN = [['sk_ahli_waris','Surat Keterangan Ahli Waris']];   // hanya tampil untuk Admin (server juga wajib menolak non-Admin)
 const daftarJenisSurat = () => adminSurat ? JENIS_SURAT.concat(JENIS_SURAT_ADMIN) : JENIS_SURAT;
-/* SEMENTARA - input manual data lama oleh Admin: tanggal pengajuan diisi sendiri (menggantikan timestamp otomatis).
-   Setelah semua data lama selesai diinput, ubah menjadi false untuk mengembalikan ke pengaturan semula. */
-const TGL_MANUAL_ADMIN = false;
-const isianTglManual = (jenis) => (TGL_MANUAL_ADMIN && adminSurat)
+/* SEMENTARA - input manual data lama (mis. dari aplikasi MySapa) oleh Admin. Dinyalakan lewat tombol "Input manual" di form
+   surat pengantar (kanan atas, sebaris NIK); selalu kembali mati saat aplikasi dimuat ulang. Saat aktif: tanggal surat dan NIK pemohon
+   diisi sendiri, pengajuan LANGSUNG disetujui (tanggal disetujui = tanggal pengajuan, durasi 0), dan TIDAK ada email.
+   Nomor surat tetap dibuat server. Tidak perlu mengubah Persetujuan.gs. */
+let modeManualAdmin = false;
+const manualAktif = () => !!(modeManualAdmin && adminSurat);
+const isianTglManual = (jenis) => manualAktif()
   ? fs('Tanggal Surat (Input Manual)', 'fa-calendar-days', inp('tgl_surat','date')) +
     (jenis === 'sk_ahli_waris' ? '' : fs('NIK Pemohon (Warga)', 'fa-id-card-clip', inpNik('nik_pengaju','16 digit NIK warga pemohon'))) : '';
 const fs = (label, ikon, html) => `<div class="mf-field"><label><i class="fa-solid ${ikon}"></i>${label}</label>${html}</div>`;
@@ -6949,16 +6960,48 @@ async function pastikanNik(){
   return '';
 }
 
+/* ----- Input manual (Admin): pengajuan langsung disetujui ----- */
+async function idMenunggu(){                                 // id pengajuan yang menunggu persetujuan (null bila gagal dibaca)
+  try{
+    const { data } = await db.rpc('daftar_notifikasi_surat', { p_token: tokenSesi });
+    if (data && data.ok && data.mode === 'admin') return (data.menunggu || []).map(x => String(x.id));
+  }catch(e){ console.error(e); }
+  return null;
+}
+async function setujuiOtomatisManual(r, sebelum){
+  const gagal = (m) => ({ ok:false, pesan:'Pengajuan tersimpan, tetapi ' + m + ' Setujui lewat menu Persetujuan Surat.' });
+  let id = '';
+  const sesudah = await idMenunggu();                        // pengajuan baru = yang tidak ada pada daftar sebelumnya
+  if (sebelum && sesudah){ const baru = sesudah.filter(x => !sebelum.includes(x)); if (baru.length === 1) id = baru[0]; }
+  if (!id && r && r.id) id = String(r.id);
+  if (!id) return gagal('pengajuan barunya tidak dapat dikenali untuk disetujui otomatis.');
+  if (!URL_PERSETUJUAN) return gagal('layanan pembuat surat belum dihubungkan.');
+  let h;
+  try{
+    const resp = await fetch(URL_PERSETUJUAN, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ aksi:'setujui', token: tokenSesi, id, tanpa_email: true }) });
+    h = await resp.json();
+  }catch(e){ console.error(e); return gagal('tidak dapat menghubungi layanan pembuat surat.'); }
+  if (!h || !h.ok) return gagal('persetujuan gagal (' + ((h && h.pesan) || 'tanpa keterangan') + ').');
+  const w = await kirimRpc('samakan_waktu_manual', { id });   // tanggal disetujui = tanggal pengajuan (durasi 0)
+  if (!w || !w.ok) return { ok:false, pesan:'Surat tersimpan dan disetujui, tetapi tanggal persetujuan belum disamakan: ' + ((w && w.pesan) || 'fungsi belum terpasang') + ' (jalankan 20_manual_samakan_waktu.sql).' };
+  return { ok:true, pesan:'Pengajuan manual tersimpan dan langsung disetujui (tanpa email).' };
+}
+
 async function renderFormSurat(isi){
   const versi = versiSubform;
   nikSurat = '';
   isi.innerHTML = `<div class="kartu-stat">
     <form id="formSurat" autocomplete="off" novalidate>
+      <div class="baris-nik-manual"><div style="flex:1;min-width:0">
       <div class="md-id" id="boxNikPemohon" style="margin:0 0 14px"><small><i class="fa-solid fa-id-card"></i> NIK Pemohon (Otomatis)</small>
         <div class="baris"><span class="nilai" id="nikSuratTampil" data-nilai="" data-tampil="0">Memuat...</span>
           <button type="button" class="md-mata" data-mata aria-label="Tampilkan NIK"><i class="fa-solid fa-eye"></i></button></div>
         <div class="peringatan-nik" id="peringatanNik" hidden><i class="fa-solid fa-circle-exclamation"></i> NIK tidak terdeteksi! Pengajuan tidak dapat dikirim.</div>
+      </div></div>
+      ${adminSurat ? '<label class="sw-manual" title="Input manual data lama: langsung disetujui, tanpa email"><span>Input manual</span><input type="checkbox" id="sakelarManual"><span class="rel"></span></label>' : ''}
       </div>
+      <div class="info-kirim" id="infoManual" hidden><i class="fa-solid fa-circle-info"></i> Mode input manual aktif: isi tanggal surat dan NIK pemohon. Pengajuan langsung disetujui (tanggal disetujui = tanggal pengajuan) dan tidak ada email.</div>
       ${fs('Jenis Surat Pengantar', 'fa-file-signature',
         '<select name="jenis_surat" required><option value="">-- Pilih Jenis Surat --</option>' +
         daftarJenisSurat().map((j, i) => `<option value="${j[0]}">${i + 1}. ${j[1]}</option>`).join('') + '</select>')}
@@ -6969,10 +7012,20 @@ async function renderFormSurat(isi){
     </form></div>`;
 
   const form = $('formSurat');
+  const sw = $('sakelarManual');
   // Ahli Waris: pemohon = NIK Pengaju yang diketik Admin, jadi kotak NIK Admin otomatis disembunyikan
-  const aturBoxNik = (jenis) => { $('boxNikPemohon').style.display = (jenis === 'sk_ahli_waris' || (TGL_MANUAL_ADMIN && adminSurat)) ? 'none' : ''; };
+  const aturBoxNik = (jenis) => { $('boxNikPemohon').style.display = (jenis === 'sk_ahli_waris' || manualAktif()) ? 'none' : ''; };
   aturBoxNik('');
-  const validasi = () => { $('btnKirimSurat').disabled = !(nikSurat && form.checkValidity()); };
+  if (sw){
+    sw.checked = manualAktif(); $('infoManual').hidden = !manualAktif();
+    sw.addEventListener('change', () => {
+      modeManualAdmin = sw.checked;
+      const jenis = form.elements['jenis_surat'].value;
+      $('isianSurat').innerHTML = (jenis ? isianTglManual(jenis) : '') + isianSurat(jenis);
+      aturBoxNik(jenis); $('infoManual').hidden = !manualAktif(); validasi();
+    });
+  }
+  const validasi = () => { $('btnKirimSurat').disabled = !((nikSurat || manualAktif()) && form.checkValidity()); };
   form.addEventListener('input', validasi);
   form.addEventListener('change', (e) => {
     const t = e.target;
@@ -6989,12 +7042,20 @@ async function renderFormSurat(isi){
     const btn = $('btnKirimSurat'), pesan = $('pesanSurat');
     btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengirim...';
     const obj = {}; new FormData(form).forEach((v, k) => { obj[k] = v; });
+    const manual = manualAktif();
+    const sebelum = manual ? await idMenunggu() : null;      // daftar pengajuan menunggu sebelum kirim (untuk mengenali pengajuan baru)
     const r = await kirimRpc('ajukan_surat', obj);
     if (r.ok){
-      pesan.innerHTML = `<div class="pesan-ok"><i class="fa-solid fa-circle-check"></i> ${esc(r.pesan)}</div>`;
-      form.reset(); $('isianSurat').innerHTML = ''; aturBoxNik('');
+      let teks = r.pesan, sukses = true;
+      if (manual){                                           // input manual: langsung disetujui, tanpa email
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyetujui otomatis...';
+        const h = await setujuiOtomatisManual(r, sebelum);
+        teks = h.pesan; sukses = h.ok;
+      }
+      pesan.innerHTML = `<div class="${sukses ? 'pesan-ok' : 'pesan-err'}"><i class="fa-solid ${sukses ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i> ${esc(teks)}</div>`;
+      form.reset(); if (sw) sw.checked = modeManualAdmin; $('isianSurat').innerHTML = ''; aturBoxNik('');
       muatStatistik();
-      kabarkanPengajuanKeEmailAdmin();
+      if (manual) segarkanLonceng(); else kabarkanPengajuanKeEmailAdmin();
     } else {
       pesan.innerHTML = `<div class="pesan-err"><i class="fa-solid fa-circle-exclamation"></i> ${esc(r.pesan || 'Terjadi kesalahan pada sistem.')}</div>`;
     }
@@ -7148,7 +7209,7 @@ document.addEventListener('click', (e) => {
       try{
         const resp = await fetch(URL_PERSETUJUAN, {
           method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ aksi:'setujui', token: tokenSesi, id }) });
+          body: JSON.stringify({ aksi:'setujui', token: tokenSesi, id, tanpa_email: manualAktif() }) });   // mode input manual: tanpa email persetujuan
         const r = await resp.json();
         if (r && r.ok){ renderNotifSurat($('isiSubform')); segarkanLonceng(); }
         return r;

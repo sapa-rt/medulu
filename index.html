@@ -236,6 +236,9 @@
   .ik{width:28px;height:28px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;position:relative;z-index:1}
   .ik .d{fill:rgba(255,255,255,.30)}
   .fitur span.nama{font-size:12px;font-weight:500;text-align:center;line-height:1.2}
+  a.fitur{text-decoration:none}
+  .fitur .lingkaran i.fa-solid{font-size:1.4rem;position:relative;z-index:1}
+  .fitur span.nomor{font-size:11px;color:var(--abu);text-align:center;line-height:1.2;margin-top:-4px}
   /* Lencana (Data Pengajuan,Info Aktual,Polling): di sudut kanan atas ikon dan selalu di depan ikon */
   .fitur .alert,.fitur .badge-notif{position:absolute;top:1px;left:calc(50% + 11px);right:auto;z-index:5}
   .fitur .alert{color:#e53935;font-size:1.1rem;line-height:1;background:#fff;border-radius:50%;box-shadow:0 0 0 1.5px #fff;display:none;
@@ -1371,6 +1374,7 @@
   .kartu-surat p{font-size:calc(.72rem + 2px)}
   .kartu-surat button{font-size:calc(.78rem + 2px)}
   .fitur span.nama{font-size:calc(12px * var(--z) + 2px)}
+  .fitur span.nomor{font-size:calc(11px * var(--z) + 2px)}
   .fitur .alert{font-size:calc(1.1rem + 2px)}
   .sp-titik .sp-panah{font-size:calc(.78rem + 2px)}
   
@@ -1798,6 +1802,14 @@
       </div>
       <div class="sp-titik" id="dsTitik" role="tablist" aria-label="Navigasi Data Statistik"></div>
 
+      <div class="judul-seksi"><i class="fa-solid fa-headset" aria-hidden="true"></i>Call Center</div>
+      <div class="grid-fitur" id="callCenter">
+        <a class="fitur" href="tel:112" aria-label="Telepon Pemkot, 112"><span class="lingkaran c1"><i class="fa-solid fa-building-columns" aria-hidden="true"></i></span><span class="nama">Pemkot</span><span class="nomor">Telepon</span></a>
+        <a class="fitur" href="https://wa.me/6282311173113" target="_blank" rel="noopener noreferrer" aria-label="Chat WhatsApp Damkar, 0823 1117 3113"><span class="lingkaran c2"><i class="fa-solid fa-fire-extinguisher" aria-hidden="true"></i></span><span class="nama">Damkar</span><span class="nomor">WhatsApp</span></a>
+        <a class="fitur" href="tel:082311173113" aria-label="Telepon Ambulance, 0823 1117 3113"><span class="lingkaran c6"><i class="fa-solid fa-truck-medical" aria-hidden="true"></i></span><span class="nama">Ambulance</span><span class="nomor">Telepon</span></a>
+        <a class="fitur" href="tel:110" aria-label="Telepon Polisi, 110"><span class="lingkaran c5"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><span class="nama">Polisi</span><span class="nomor">Telepon</span></a>
+      </div>
+
       <div class="footer-utama" style="margin-top:26px">Medulu-V2 &copy; 2026</div>
     </div>
   </main>
@@ -1989,6 +2001,7 @@ const $ = (id) => document.getElementById(id);
 let tokenSesi = null;
 let statistik = null;
 let statDetail = null;   // rincian get_statistik_detail untuk modal Data Statistik
+let statCerai = null;    // jumlah Cerai Mati / Cerai Hidup menurut jenis kelamin (get_statistik_cerai)
 let statKr = null;       // hitungan Disabilitas/Bumil/Bantuan (get_statistik_kerentanan)
 let pollStatus = null, pollSelisih = 0, plTimer = null, plPoll = null, plIdAdmin = '';
 let chartGender = null;
@@ -2445,7 +2458,7 @@ document.addEventListener('keydown', e => {
 
 async function keluarSekarang(){
   try{ await db.rpc('logout_warga', { p_token: tokenSesi }); }catch(e){}
-  hapusToken(); tokenSesi = null; statistik = null; statDetail = null; statKr = null; arData = null; telpLogin = '';
+  hapusToken(); tokenSesi = null; statistik = null; statDetail = null; statKr = null; statCerai = null; arData = null; telpLogin = '';
   tampilkanLogin();
 }
 async function keluar(){
@@ -2460,7 +2473,7 @@ async function muatStatistik(){
     const { data, error } = await db.rpc('get_statistik', { p_token: tokenSesi });
     if (error) throw error;
     if (!data.ok){ hapusToken(); toast('Sesi berakhir, silakan masuk kembali.'); return tampilkanLogin(); }
-    statistik = data; statDetail = null; statKr = null;
+    statistik = data; statDetail = null; statKr = null; statCerai = null;
     $('angkaKK').textContent = fmt(data.jumlah_kk);
     $('angkaJiwa').textContent = fmt(data.jumlah_jiwa);
     $('angkaWafat').textContent = fmt(data.jumlah_wafat);
@@ -2552,7 +2565,7 @@ async function renderStatistik(isi){
     </div>` : '') + `
     <div class="kartu-stat">
       <h3 class="st-judul st-biru"><i class="fa-solid fa-star"></i> Data Warga Prioritas</h3>
-      ${htmlPrioritas(d, kr)}
+      ${htmlPrioritas(d, kr, 'stCerai')}
     </div>
     <div class="kartu-stat">
       <h3 class="st-judul st-biru"><i class="fa-solid fa-hand-holding-heart"></i> Keluarga Penerima Manfaat</h3>
@@ -2581,6 +2594,7 @@ async function renderStatistik(isi){
       options:opsiBar(true, false), plugins:[pluginNilai] }));
   }
   if (kr) gambarChartKr($('stKr'), kr, chartStat);
+  isiCerai('stCerai', chartStat, () => versi === versiSubform);
 }
 
 
@@ -7282,13 +7296,70 @@ function pesanKr(e){
   if (e && (e.code === 'PGRST202' || /could not find the function/i.test(msg))) return 'Fungsi get_statistik_kerentanan belum terpasang di Supabase. Jalankan 14_kerentanan.sql.';
   return msg || 'Data belum tersedia.';
 }
+/* ---- Cerai Mati / Cerai Hidup menurut jenis kelamin (bagian dari Data Warga Prioritas) ----
+   RPC get_statistik_cerai(p_token) -> { ok, cerai_mati:{L,P}, cerai_hidup:{L,P} }  (18_cerai.sql).
+   Bila fungsi belum terpasang, Admin tetap dapat melihat chart: dihitung dari get_warga_lengkap. */
+function hitungCeraiDariWarga(baris){
+  const h = { cerai_mati:{ L:0, P:0 }, cerai_hidup:{ L:0, P:0 } };
+  (baris || []).forEach(r => {
+    if (r.wafat === true || /thn.*bln/i.test(String(r.usia ?? '')) || dbNonKosong(r.tgl_wafat)) return;
+    const k = Object.keys(r).find(x => /nikah|kawin/i.test(x)); if (!k) return;
+    const st = String(r[k] ?? '').toLowerCase(), jk = String(r.jenis_kelamin ?? '').toUpperCase().slice(0, 1);
+    if (jk !== 'L' && jk !== 'P') return;
+    if (/cerai\s*mati/.test(st)) h.cerai_mati[jk]++;
+    else if (/cerai\s*hidup/.test(st)) h.cerai_hidup[jk]++;
+  });
+  return h;
+}
+async function ambilStatCerai(){
+  if (statCerai) return statCerai;
+  try{
+    const { data, error } = await db.rpc('get_statistik_cerai', { p_token: tokenSesi });
+    if (error) throw error;
+    if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat data cerai.');
+    statCerai = data;
+  }catch(e){
+    const msg = String((e && e.message) || '');
+    const belumAda = e && (e.code === 'PGRST202' || /could not find the function/i.test(msg));
+    if (!(belumAda && aksesPenuh)) throw e;
+    const { data, error } = await db.rpc('get_warga_lengkap', { p_token: tokenSesi });
+    if (error) throw error;
+    if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat data warga.');
+    statCerai = hitungCeraiDariWarga(data.data);
+  }
+  return statCerai;
+}
+function pesanCerai(e){
+  const msg = String((e && e.message) || '');
+  if (!aksesPenuh) return 'Data belum tersedia.';
+  if (e && (e.code === 'PGRST202' || /could not find the function/i.test(msg))) return 'Fungsi get_statistik_cerai belum terpasang di Supabase. Jalankan 18_cerai.sql.';
+  return msg || 'Data belum tersedia.';
+}
+function gambarCerai(canvas, c, daftar){
+  if (!canvas) return;
+  const m = c.cerai_mati || {}, h = c.cerai_hidup || {};
+  daftar.push(new Chart(canvas, { type:'bar',
+    data:{ labels:['Cerai Mati','Cerai Hidup'], datasets:[
+      { label:'Laki-laki', data:[m.L || 0, h.L || 0], backgroundColor:'#1558c9', borderRadius:6, maxBarThickness:34 },
+      { label:'Perempuan', data:[m.P || 0, h.P || 0], backgroundColor:'#ff8a1f', borderRadius:6, maxBarThickness:34 } ] },
+    options:opsiBar(false, true), plugins:[pluginNilai] }));
+}
+async function isiCerai(idWadah, daftar, masihAktif){
+  let c = null, gagal = '';
+  try{ c = await ambilStatCerai(); }catch(e){ console.error(e); gagal = pesanCerai(e); }
+  if (!masihAktif()) return;
+  const w = $(idWadah); if (!w) return;
+  if (!c){ w.innerHTML = `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>${esc(gagal)}</div>`; return; }
+  w.innerHTML = `<div class="st-bar"><canvas id="${idWadah}Chart"></canvas></div>`;
+  gambarCerai($(idWadah + 'Chart'), c, daftar);
+}
 function htmlKerentanan(kr, gagal, idCanvas){      // kartu Keluarga Penerima Manfaat: hanya infografik penerima bantuan
   if (!kr) return `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>${esc(gagal || 'Data belum tersedia.')}</div>`;
   return `<div class="st-bar"><canvas id="${idCanvas}"></canvas></div>
     <div class="st-ket">PKH = Program Keluarga Harapan • PBI-JK = Penerima Bantuan Iuran Jaminan Kesehatan • PIP = Program Indonesia Pintar • KIS = Kartu Indonesia Sehat</div>`;
 }
 /* Data Warga Prioritas: Disabilitas, Bumil (get_statistik_kerentanan), Lansia (>60) dan Balita (<5) (get_statistik_detail.usia) */
-function htmlPrioritas(d, kr){
+function htmlPrioritas(d, kr, idCerai){
   const u = (d && d.usia) || {};
   const ada = (v) => v !== null && v !== undefined;
   const t = (v) => ada(v) ? fmt(v) : '-';
@@ -7298,7 +7369,9 @@ function htmlPrioritas(d, kr){
       <div class="kr-kotak b"><i class="fa-solid fa-person-pregnant"></i><span>Ibu Hamil<b>${t(kr && kr.bumil)}</b></span></div>
       <div class="kr-kotak l"><i class="fa-solid fa-person-cane"></i><span>Lansia (&gt;60 th)<b>${t(u.lansia)}</b></span></div>
       <div class="kr-kotak a"><i class="fa-solid fa-baby"></i><span>Balita (&lt;5 th)<b>${t(balita)}</b></span></div>
-    </div>`;
+    </div>
+    <div class="kr-sub">Cerai menurut Jenis Kelamin</div>
+    <div id="${idCerai}"><div class="kosong" style="margin:12px 0"><i class="fa-solid fa-spinner fa-spin"></i>Memuat data...</div></div>`;
 }
 function htmlGender(idDonut){
   const L = statistik.laki_laki || 0, P = statistik.perempuan || 0;
@@ -7361,7 +7434,8 @@ async function bukaModalStat(kunci){
       ambilStatDetail().then(v => { d = v; }).catch(e => console.error(e))
     ]);
     if (versi !== versiModalStat) return;
-    isi.innerHTML = htmlPrioritas(d, kr);
+    isi.innerHTML = htmlPrioritas(d, kr, 'msCerai');
+    isiCerai('msCerai', chartModal, () => versi === versiModalStat);
     return;
   }
 

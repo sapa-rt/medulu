@@ -7348,17 +7348,18 @@ function htmlPrioritas(pr, gagal, idCerai){
 function htmlPekerjaan(d){
   const k = d && d.pekerjaan;
   if (!k) return aksesPenuh ? `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>Data pekerjaan belum tersedia. Perbarui fungsi get_statistik_detail (06_dashboard_statistik.sql).</div>` : '';
-  const kotak = (kls, ikon, nama, v, penuh) => { v = v || {};
-    return `<div class="kr-kotak ${kls}"${penuh ? ' style="grid-column:1/-1"' : ''}><i class="fa-solid ${ikon}"></i><span>${nama}<b>${fmt(Number(v.jiwa) || 0)}<small> Jiwa</small></b><small>${fmt(Number(v.kk) || 0)} KK</small></span></div>`; };
+  const kotak = (kls, ikon, nama, v) => { v = v || {};
+    return `<div class="kr-kotak ${kls}"><i class="fa-solid ${ikon}"></i><span>${nama}<b>${fmt(Number(v.jiwa) || 0)}<small> Jiwa</small></b><small>${fmt(Number(v.kk) || 0)} KK</small></span></div>`; };
   return `<div class="kr-sub">Pekerjaan</div>
     <div class="kr-dua">
       ${kotak('d', 'fa-id-badge', 'PNS/PPPK', k.pns)}
       ${kotak('b', 'fa-chalkboard-user', 'Guru', k.guru)}
       ${kotak('l', 'fa-user-graduate', 'Dosen', k.dosen)}
-      ${kotak('a', 'fa-briefcase', 'Karyawan', k.karyawan)}
-      ${kotak('d', 'fa-user-doctor', 'Dokter', k.dokter)}
-      ${kotak('b', 'fa-pills', 'Apoteker', k.apoteker)}
-      ${kotak('l', 'fa-user-clock', 'Pensiunan', k.pensiunan, true)}
+      ${kotak('a', 'fa-user-doctor', 'Dokter', k.dokter)}
+      ${kotak('d', 'fa-pills', 'Apoteker', k.apoteker)}
+      ${kotak('b', 'fa-building', 'Karyawan BUMN', k.bumn)}
+      ${kotak('l', 'fa-briefcase', 'Karyawan Swasta', k.swasta)}
+      ${kotak('a', 'fa-user-clock', 'Pensiunan', k.pensiunan)}
     </div>`;
 }
 function htmlGender(idDonut){

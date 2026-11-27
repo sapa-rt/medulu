@@ -7001,7 +7001,6 @@ async function renderFormSurat(isi){
       </div></div>
       ${adminSurat ? '<label class="sw-manual" title="Input manual data lama: langsung disetujui, tanpa email"><span>Input manual</span><input type="checkbox" id="sakelarManual"><span class="rel"></span></label>' : ''}
       </div>
-      <div class="info-kirim" id="infoManual" hidden><i class="fa-solid fa-circle-info"></i> Mode input manual aktif: isi tanggal surat dan NIK pemohon. Pengajuan langsung disetujui (tanggal disetujui = tanggal pengajuan) dan tidak ada email.</div>
       ${fs('Jenis Surat Pengantar', 'fa-file-signature',
         '<select name="jenis_surat" required><option value="">-- Pilih Jenis Surat --</option>' +
         daftarJenisSurat().map((j, i) => `<option value="${j[0]}">${i + 1}. ${j[1]}</option>`).join('') + '</select>')}

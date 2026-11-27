@@ -2001,8 +2001,8 @@ const $ = (id) => document.getElementById(id);
 let tokenSesi = null;
 let statistik = null;
 let statDetail = null;   // rincian get_statistik_detail untuk modal Data Statistik
-let statCerai = null;    // jumlah Cerai Mati / Cerai Hidup menurut jenis kelamin (get_statistik_cerai)
-let statKr = null;       // hitungan Disabilitas/Bumil/Bantuan (get_statistik_kerentanan)
+let statKr = null;       // hitungan Bantuan (get_statistik_kerentanan)
+let statPrioritas = null; // Disabilitas, Bumil, Lansia, Balita, Cerai (get_statistik_prioritas)
 let pollStatus = null, pollSelisih = 0, plTimer = null, plPoll = null, plIdAdmin = '';
 let chartGender = null;
 let suratMenunggu = 0;
@@ -2458,7 +2458,7 @@ document.addEventListener('keydown', e => {
 
 async function keluarSekarang(){
   try{ await db.rpc('logout_warga', { p_token: tokenSesi }); }catch(e){}
-  hapusToken(); tokenSesi = null; statistik = null; statDetail = null; statKr = null; statCerai = null; arData = null; telpLogin = '';
+  hapusToken(); tokenSesi = null; statistik = null; statDetail = null; statKr = null; statPrioritas = null; arData = null; telpLogin = '';
   tampilkanLogin();
 }
 async function keluar(){
@@ -2473,7 +2473,7 @@ async function muatStatistik(){
     const { data, error } = await db.rpc('get_statistik', { p_token: tokenSesi });
     if (error) throw error;
     if (!data.ok){ hapusToken(); toast('Sesi berakhir, silakan masuk kembali.'); return tampilkanLogin(); }
-    statistik = data; statDetail = null; statKr = null; statCerai = null;
+    statistik = data; statDetail = null; statKr = null; statPrioritas = null;
     $('angkaKK').textContent = fmt(data.jumlah_kk);
     $('angkaJiwa').textContent = fmt(data.jumlah_jiwa);
     $('angkaWafat').textContent = fmt(data.jumlah_wafat);
@@ -2543,10 +2543,12 @@ async function renderStatistik(isi){
 
   let kr = null, krGagal = '';
   const pKr = ambilStatKr().then(v => { kr = v; }).catch(e => { console.error(e); krGagal = pesanKr(e); });
+  let pr = null, prGagal = '';
+  const pPr = ambilStatPrioritas().then(v => { pr = v; }).catch(e => { console.error(e); prGagal = pesanPrioritas(e); });
   let d = null, gagal = '';
   try{ d = await ambilStatDetail(); }
   catch(e){ console.error(e); gagal = e.message || 'Tidak dapat memuat rincian statistik. Periksa koneksi Anda.'; }
-  await pKr;
+  await Promise.all([pKr, pPr]);
   if (versi !== versiSubform) return;
   const wadah = $('stRincian'), wUsia = $('stUsiaWadah'); if (!wadah || !wUsia) return;
 
@@ -2565,7 +2567,7 @@ async function renderStatistik(isi){
     </div>` : '') + `
     <div class="kartu-stat">
       <h3 class="st-judul st-biru"><i class="fa-solid fa-star"></i> Data Warga Prioritas</h3>
-      ${htmlPrioritas(d, kr, 'stCerai')}
+      ${htmlPrioritas(pr, prGagal, 'stCerai')}
     </div>
     <div class="kartu-stat">
       <h3 class="st-judul st-biru"><i class="fa-solid fa-hand-holding-heart"></i> Keluarga Penerima Manfaat</h3>
@@ -2594,7 +2596,7 @@ async function renderStatistik(isi){
       options:opsiBar(true, false), plugins:[pluginNilai] }));
   }
   if (kr) gambarChartKr($('stKr'), kr, chartStat);
-  isiCerai('stCerai', chartStat, () => versi === versiSubform);
+  if (pr) gambarCerai($('stCerai'), pr.cerai, chartStat);
 }
 
 
@@ -6624,7 +6626,7 @@ async function renderDatabaseWarga(isi){
     inp.disabled = true;
     const r = await kirimRpc('simpan_kerentanan', { nik: w.nik, [f]: nilai });
     inp.disabled = false;
-    if (r && r.ok){ w[f] = nilai; krCari(w); statKr = null; toast('Tersimpan.'); }
+    if (r && r.ok){ w[f] = nilai; krCari(w); statKr = null; statPrioritas = null; toast('Tersimpan.'); }
     else { inp.checked = !nilai; toast((r && r.pesan) || 'Gagal menyimpan.'); }
   }
 
@@ -6705,7 +6707,7 @@ function dbModalBantuan(w, btn){
       const pilih = fd.getAll('bantuan');
       const r = await kirimRpc('simpan_kerentanan', { nik: w.nik, bantuan: pilih });
       if (!r || !r.ok) return r || { ok:false, pesan:'Gagal menyimpan.' };
-      w.bantuan = KR_BANTUAN.filter(b => pilih.includes(b)); krCari(w); statKr = null;
+      w.bantuan = KR_BANTUAN.filter(b => pilih.includes(b)); krCari(w); statKr = null; statPrioritas = null;
       if (btn && btn.isConnected){
         btn.textContent = w.bantuan.length ? w.bantuan.join(', ') : '+ Pilih';
         btn.classList.toggle('isi', w.bantuan.length > 0);
@@ -7296,82 +7298,48 @@ function pesanKr(e){
   if (e && (e.code === 'PGRST202' || /could not find the function/i.test(msg))) return 'Fungsi get_statistik_kerentanan belum terpasang di Supabase. Jalankan 14_kerentanan.sql.';
   return msg || 'Data belum tersedia.';
 }
-/* ---- Cerai Mati / Cerai Hidup menurut jenis kelamin (bagian dari Data Warga Prioritas) ----
-   RPC get_statistik_cerai(p_token) -> { ok, cerai_mati:{L,P}, cerai_hidup:{L,P} }  (18_cerai.sql).
-   Bila fungsi belum terpasang, Admin tetap dapat melihat chart: dihitung dari get_warga_lengkap. */
-function hitungCeraiDariWarga(baris){
-  const h = { cerai_mati:{ L:0, P:0 }, cerai_hidup:{ L:0, P:0 } };
-  (baris || []).forEach(r => {
-    if (r.wafat === true || /thn.*bln/i.test(String(r.usia ?? '')) || dbNonKosong(r.tgl_wafat)) return;
-    const k = Object.keys(r).find(x => /nikah|kawin/i.test(x)); if (!k) return;
-    const st = String(r[k] ?? '').toLowerCase(), jk = String(r.jenis_kelamin ?? '').toUpperCase().slice(0, 1);
-    if (jk !== 'L' && jk !== 'P') return;
-    if (/cerai\s*mati/.test(st)) h.cerai_mati[jk]++;
-    else if (/cerai\s*hidup/.test(st)) h.cerai_hidup[jk]++;
-  });
-  return h;
+/* ---- Data Warga Prioritas: satu RPC get_statistik_prioritas (18_statistik_prioritas.sql) ----
+   { ok, difabel, bumil, lansia, balita, cerai:{ mati:{L,P}, hidup:{L,P} } } */
+async function ambilStatPrioritas(){
+  if (statPrioritas) return statPrioritas;
+  const { data, error } = await db.rpc('get_statistik_prioritas', { p_token: tokenSesi });
+  if (error) throw error;
+  if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat data.');
+  statPrioritas = data;
+  return data;
 }
-async function ambilStatCerai(){
-  if (statCerai) return statCerai;
-  try{
-    const { data, error } = await db.rpc('get_statistik_cerai', { p_token: tokenSesi });
-    if (error) throw error;
-    if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat data cerai.');
-    statCerai = data;
-  }catch(e){
-    const msg = String((e && e.message) || '');
-    const belumAda = e && (e.code === 'PGRST202' || /could not find the function/i.test(msg));
-    if (!(belumAda && aksesPenuh)) throw e;
-    const { data, error } = await db.rpc('get_warga_lengkap', { p_token: tokenSesi });
-    if (error) throw error;
-    if (!data || !data.ok) throw new Error((data && data.pesan) || 'Gagal memuat data warga.');
-    statCerai = hitungCeraiDariWarga(data.data);
-  }
-  return statCerai;
-}
-function pesanCerai(e){
+function pesanPrioritas(e){
   const msg = String((e && e.message) || '');
   if (!aksesPenuh) return 'Data belum tersedia.';
-  if (e && (e.code === 'PGRST202' || /could not find the function/i.test(msg))) return 'Fungsi get_statistik_cerai belum terpasang di Supabase. Jalankan 18_cerai.sql.';
+  if (e && (e.code === 'PGRST202' || /could not find the function/i.test(msg))) return 'Fungsi get_statistik_prioritas belum terpasang di Supabase. Jalankan 18_statistik_prioritas.sql.';
   return msg || 'Data belum tersedia.';
 }
 function gambarCerai(canvas, c, daftar){
-  if (!canvas) return;
-  const m = c.cerai_mati || {}, h = c.cerai_hidup || {};
+  if (!canvas || !c) return;
+  const m = c.mati || {}, h = c.hidup || {};
   daftar.push(new Chart(canvas, { type:'bar',
     data:{ labels:['Cerai Mati','Cerai Hidup'], datasets:[
       { label:'Laki-laki', data:[m.L || 0, h.L || 0], backgroundColor:'#1558c9', borderRadius:6, maxBarThickness:34 },
       { label:'Perempuan', data:[m.P || 0, h.P || 0], backgroundColor:'#ff8a1f', borderRadius:6, maxBarThickness:34 } ] },
     options:opsiBar(false, true), plugins:[pluginNilai] }));
 }
-async function isiCerai(idWadah, daftar, masihAktif){
-  let c = null, gagal = '';
-  try{ c = await ambilStatCerai(); }catch(e){ console.error(e); gagal = pesanCerai(e); }
-  if (!masihAktif()) return;
-  const w = $(idWadah); if (!w) return;
-  if (!c){ w.innerHTML = `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>${esc(gagal)}</div>`; return; }
-  w.innerHTML = `<div class="st-bar"><canvas id="${idWadah}Chart"></canvas></div>`;
-  gambarCerai($(idWadah + 'Chart'), c, daftar);
-}
 function htmlKerentanan(kr, gagal, idCanvas){      // kartu Keluarga Penerima Manfaat: hanya infografik penerima bantuan
   if (!kr) return `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>${esc(gagal || 'Data belum tersedia.')}</div>`;
   return `<div class="st-bar"><canvas id="${idCanvas}"></canvas></div>
     <div class="st-ket">PKH = Program Keluarga Harapan • PBI-JK = Penerima Bantuan Iuran Jaminan Kesehatan • PIP = Program Indonesia Pintar • KIS = Kartu Indonesia Sehat</div>`;
 }
-/* Data Warga Prioritas: Disabilitas, Bumil (get_statistik_kerentanan), Lansia (>60) dan Balita (<5) (get_statistik_detail.usia) */
-function htmlPrioritas(d, kr, idCerai){
-  const u = (d && d.usia) || {};
-  const ada = (v) => v !== null && v !== undefined;
-  const t = (v) => ada(v) ? fmt(v) : '-';
-  const balita = ada(u.balita) ? u.balita : (kr && ada(kr.balita) ? kr.balita : null);
+/* Data Warga Prioritas: Disabilitas, Ibu Hamil, Lansia (>60 th), Balita (<5 th) dan chart Cerai menurut jenis kelamin */
+function htmlPrioritas(pr, gagal, idCerai){
+  if (!pr) return `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>${esc(gagal || 'Data belum tersedia.')}</div>`;
+  const t = (v) => fmt(Number(v) || 0);
   return `<div class="kr-dua">
-      <div class="kr-kotak d"><i class="fa-solid fa-wheelchair"></i><span>Disabilitas<b>${t(kr && kr.difabel)}</b></span></div>
-      <div class="kr-kotak b"><i class="fa-solid fa-person-pregnant"></i><span>Ibu Hamil<b>${t(kr && kr.bumil)}</b></span></div>
-      <div class="kr-kotak l"><i class="fa-solid fa-person-cane"></i><span>Lansia (&gt;60 th)<b>${t(u.lansia)}</b></span></div>
-      <div class="kr-kotak a"><i class="fa-solid fa-baby"></i><span>Balita (&lt;5 th)<b>${t(balita)}</b></span></div>
+      <div class="kr-kotak d"><i class="fa-solid fa-wheelchair"></i><span>Disabilitas<b>${t(pr.difabel)}</b></span></div>
+      <div class="kr-kotak b"><i class="fa-solid fa-person-pregnant"></i><span>Ibu Hamil<b>${t(pr.bumil)}</b></span></div>
+      <div class="kr-kotak l"><i class="fa-solid fa-person-cane"></i><span>Lansia (&gt;60 th)<b>${t(pr.lansia)}</b></span></div>
+      <div class="kr-kotak a"><i class="fa-solid fa-baby"></i><span>Balita (&lt;5 th)<b>${t(pr.balita)}</b></span></div>
     </div>
     <div class="kr-sub">Cerai menurut Jenis Kelamin</div>
-    <div id="${idCerai}"><div class="kosong" style="margin:12px 0"><i class="fa-solid fa-spinner fa-spin"></i>Memuat data...</div></div>`;
+    <div class="st-bar"><canvas id="${idCerai}"></canvas></div>`;
 }
 function htmlGender(idDonut){
   const L = statistik.laki_laki || 0, P = statistik.perempuan || 0;
@@ -7428,14 +7396,11 @@ async function bukaModalStat(kunci){
 
   /* Gambar 3: Data Warga Prioritas */
   if (kunci === 'usia'){
-    let kr = null, d = null;
-    await Promise.all([
-      ambilStatKr().then(v => { kr = v; }).catch(e => console.error(e)),
-      ambilStatDetail().then(v => { d = v; }).catch(e => console.error(e))
-    ]);
+    let pr = null, prGagal = '';
+    try{ pr = await ambilStatPrioritas(); }catch(e){ console.error(e); prGagal = pesanPrioritas(e); }
     if (versi !== versiModalStat) return;
-    isi.innerHTML = htmlPrioritas(d, kr, 'msCerai');
-    isiCerai('msCerai', chartModal, () => versi === versiModalStat);
+    isi.innerHTML = htmlPrioritas(pr, prGagal, 'msCerai');
+    if (pr) gambarCerai($('msCerai'), pr.cerai, chartModal);
     return;
   }
 

@@ -416,6 +416,11 @@
   .kr-kotak.a{background:#dcfce7;color:#15803d}
   .kr-kotak span small{font-size:.8em;font-weight:500;opacity:.85}
   .kr-kotak b small{font-size:.6em}
+  .kr-tiga{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .kr-tiga .kr-kotak{flex-direction:column;justify-content:center;text-align:center;gap:4px;padding:10px 4px;font-size:.66rem;min-width:0}
+  .kr-tiga .kr-kotak i{font-size:1.2rem}
+  .kr-tiga .kr-kotak span{align-items:center;overflow-wrap:anywhere}
+  .kr-tiga .kr-kotak b{font-size:1.05rem}
   .st-biru{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:600;color:var(--biru-tua);
     background:#e6f0fd;padding:9px 12px;border-radius:12px;margin:0 0 12px}
   .st-biru i{color:var(--biru)}
@@ -1768,7 +1773,7 @@
         <div class="sp-slide"><button type="button" class="ds-btn" data-stat="status" aria-label="Buka rincian Status Warga"><img src="https://res.cloudinary.com/q7sznixw/image/upload/v1790743570/Domisili_wqbnfa.webp" alt="Data Statistik 2: Status Warga" draggable="false" loading="lazy"></button></div>
         <div class="sp-slide"><button type="button" class="ds-btn" data-stat="usia" aria-label="Buka rincian Data Warga Prioritas"><img src="https://res.cloudinary.com/q7sznixw/image/upload/v1790743569/Prioritas_11zon_n42ho4.webp" alt="Data Statistik 3: Jumlah Jiwa menurut Usia" draggable="false" loading="lazy"></button></div>
         <div class="sp-slide"><button type="button" class="ds-btn" data-stat="bantuan" aria-label="Buka rincian Keluarga Penerima Manfaat"><img src="https://res.cloudinary.com/q7sznixw/image/upload/v1790743570/Bantuan_11zon_a1rqbs.webp" alt="Data Statistik 4: Data Bantuan" draggable="false" loading="lazy"></button></div>
-        <div class="sp-slide"><button type="button" class="ds-btn" data-stat="pendidikan" aria-label="Buka rincian Pendidikan Terakhir"><img src="https://res.cloudinary.com/q7sznixw/image/upload/v1795822857/Infografis_Pendidikan_dan_Profesi_teks_vdgfqg.webp" alt="Data Statistik 5: Pendidikan Terakhir" draggable="false" loading="lazy"></button></div>
+        <div class="sp-slide"><button type="button" class="ds-btn" data-stat="pendidikan" aria-label="Buka rincian Pendidikan dan Profesi"><img src="https://res.cloudinary.com/q7sznixw/image/upload/v1795822857/Infografis_Pendidikan_dan_Profesi_teks_vdgfqg.webp" alt="Data Statistik 5: Pendidikan dan Profesi" draggable="false" loading="lazy"></button></div>
       </div>
       <div class="sp-titik" id="dsTitik" role="tablist" aria-label="Navigasi Data Statistik"></div>
 
@@ -2544,7 +2549,8 @@ async function renderStatistik(isi){
       ${htmlKerentanan(kr, krGagal, 'stKr')}
     </div>` + (d ? `
     <div class="kartu-stat">
-      <h3 class="st-judul st-biru"><i class="fa-solid fa-graduation-cap"></i> Pendidikan Terakhir</h3>
+      <h3 class="st-judul st-biru"><i class="fa-solid fa-graduation-cap"></i> Pendidikan dan Profesi</h3>
+      <div class="kr-sub" style="margin-top:0">Pendidikan</div>
       <div class="st-bar tinggi"><canvas id="stPendidikan"></canvas></div>
       <div class="st-ket">Diploma: D1–D3 • Sarjana: S1/D4 • Pascasarjana: S2-S3</div>
       ${htmlPekerjaan(d)}
@@ -7224,7 +7230,7 @@ const MODAL_STAT = {
   status:     { judul:'Status Domisili Warga',  ikon:'fa-house-user' },
   usia:       { judul:'Data Warga Prioritas',              ikon:'fa-star' },
   bantuan:    { judul:'Keluarga Penerima Manfaat',         ikon:'fa-hand-holding-heart' },
-  pendidikan: { judul:'Pendidikan Terakhir',               ikon:'fa-graduation-cap' }
+  pendidikan: { judul:'Pendidikan dan Profesi',            ikon:'fa-graduation-cap' }
 };
 function hapusChartModal(){ chartModal.forEach(c => c.destroy()); chartModal = []; }
 async function ambilStatDetail(){
@@ -7308,22 +7314,23 @@ function htmlPrioritas(pr, gagal, idCerai){
     <div class="kr-sub">Cerai menurut Jenis Kelamin</div>
     <div class="st-bar"><canvas id="${idCerai}"></canvas></div>`;
 }
-/* Kartu pekerjaan di bawah Pendidikan Terakhir: jumlah Jiwa dan KK (get_statistik_detail().pekerjaan) */
+/* Kartu profesi di bawah Pendidikan: jumlah Jiwa dan KK (get_statistik_detail().pekerjaan) */
 function htmlPekerjaan(d){
   const k = d && d.pekerjaan;
   if (!k) return aksesPenuh ? `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>Data pekerjaan belum tersedia. Perbarui fungsi get_statistik_detail (06_dashboard_statistik.sql).</div>` : '';
   const kotak = (kls, ikon, nama, v) => { v = v || {};
     return `<div class="kr-kotak ${kls}"><i class="fa-solid ${ikon}"></i><span>${nama}<b>${fmt(Number(v.jiwa) || 0)}<small> Jiwa</small></b><small>${fmt(Number(v.kk) || 0)} KK</small></span></div>`; };
-  return `<div class="kr-sub">Pekerjaan</div>
-    <div class="kr-dua">
-      ${kotak('d', 'fa-id-badge', 'PNS/PPPK', k.pns)}
-      ${kotak('b', 'fa-chalkboard-user', 'Guru', k.guru)}
+  return `<div class="kr-sub">Profesi</div>
+    <div class="kr-tiga">
+      ${kotak('d', 'fa-id-badge', 'PNS', k.pns)}
       ${kotak('l', 'fa-user-graduate', 'Dosen', k.dosen)}
+      ${kotak('b', 'fa-chalkboard-user', 'Guru', k.guru)}
       ${kotak('a', 'fa-user-doctor', 'Dokter', k.dokter)}
       ${kotak('d', 'fa-pills', 'Apoteker', k.apoteker)}
-      ${kotak('b', 'fa-building', 'Karyawan BUMN', k.bumn)}
-      ${kotak('l', 'fa-briefcase', 'Karyawan Swasta', k.swasta)}
-      ${kotak('a', 'fa-user-clock', 'Pensiunan', k.pensiunan)}
+      ${kotak('l', 'fa-user-clock', 'Pensiunan', k.pensiunan)}
+      ${kotak('b', 'fa-building', 'Karyawan BUMN/D', k.bumn)}
+      ${kotak('a', 'fa-briefcase', 'Karyawan Swasta', k.swasta)}
+      ${kotak('d', 'fa-users-gear', 'Lainnya', k.lainnya)}
     </div>`;
 }
 function htmlGender(idDonut){
@@ -7438,6 +7445,7 @@ async function bukaModalStat(kunci){
       options:opsiBar(false, true), plugins:[pluginNilai] }));
   } else if (kunci === 'pendidikan'){
     isi.innerHTML = `
+      <div class="kr-sub" style="margin-top:0">Pendidikan</div>
       <div class="st-bar tinggi"><canvas id="msBar"></canvas></div>
       <div class="st-ket">Diploma: D1–D3 • Sarjana: S1/D4 • Pascasarjana: S2-S3</div>
       ${htmlPekerjaan(d)}`;

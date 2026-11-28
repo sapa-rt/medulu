@@ -271,17 +271,8 @@
   .sp-titik button{width:8px;height:8px;padding:0;border:0;border-radius:999px;background:#c5d2ea;cursor:pointer;
     transition:width .25s ease, background .25s ease}
   .sp-titik button.aktif{width:22px;background:var(--biru)}
-  /* panah kiri/kanan berada di baris titik (di bawah gambar),tidak menimpa gambar */
-  .sp-titik.dengan-panah{gap:9px;margin-top:8px}
-  .sp-titik .sp-panah{width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:50%;
-    background:rgba(21,88,201,.5);color:#fff;font-size:.78rem;transition:transform .15s ease, background .2s ease}
-  .sp-titik .sp-panah:hover{background:rgba(21,88,201,.7)}
-  .sp-titik .sp-panah:active{transform:scale(.9)}
-  .sp-titik .sp-panah:focus-visible{outline:3px solid rgba(21,88,201,.45);outline-offset:2px}
-  /* di gambar pertama / terakhir: panah yang tidak bisa dipakai disembunyikan (ruangnya tetap,titik-titik tidak bergeser) */
-  .sp-titik .sp-panah.lembut{visibility:hidden;pointer-events:none}
   /* Hanya Data Statistik */
-  #dsGeser{scroll-snap-type:none}   /* geser bebas; langkah otomatis diatur di pasangCarousel (opsi halaman) */
+  #dsGeser{scroll-snap-type:none}   /* geser bebas; langkah otomatis diatur di pasangCarousel */
   #dsGeser .sp-slide{border-radius:8px; flex:0 0 auto;}
   #dsGeser .sp-slide img{height:160px; width:auto; max-width:none;}
   #dsGeser .ds-btn{border-radius:inherit;}
@@ -1176,8 +1167,6 @@
 .ar .ar-v.kor th:nth-child(1){width:23%}.ar .ar-v.kor th:nth-child(2){width:13%}.ar .ar-v.kor th:nth-child(3){width:15%}
 .ar .ar-v.kor th:nth-child(4){width:35%}.ar .ar-v.kor th:nth-child(5){width:14%}
 .ar .ar-v.kor th:nth-child(5),.ar .ar-v.kor td:nth-child(5){text-align:center}
-/* Data Statistik: geser manual; panah kiri/kanan hanya untuk tablet/PC */
-#dsTitik .sp-panah{display:none}
 
 /* ---------- Tablet (>= 768px) ---------- */
 @media (min-width:768px){
@@ -1226,9 +1215,7 @@
 
   /* Carousel: beberapa gambar terlihat sekaligus */
   #spGeser .sp-slide{flex:0 0 calc((100% - var(--sp-jarak) * 2) / 3);scroll-snap-align:start}
-  #dsTitik .sp-panah{display:flex}
   #dsGeser .sp-slide img{height:calc(160px * var(--z))}
-  .sp-titik .sp-panah{width:calc(32px * var(--z));height:calc(32px * var(--z))}
 
   /* Subform (halaman geser dari kanan) */
   .subform-header{
@@ -1372,7 +1359,6 @@
   .fitur span.nama{font-size:calc(12px * var(--z) + 2px)}
   .fitur span.nomor{font-size:calc(10px * var(--z) + 2px);letter-spacing:0}
   .fitur .alert{font-size:calc(1.1rem + 2px)}
-  .sp-titik .sp-panah{font-size:calc(.78rem + 2px)}
 
   .md-profil .md-nm{font-size:calc(1rem + 2px)}
   .md-profil .md-mata{font-size:calc(.66rem + 2px)}
@@ -7484,7 +7470,7 @@ document.addEventListener('keydown', e => {
    STANDAR PELAYANAN: carousel geser kanan + titik navigasi
    ===================================================================== */
 function pasangCarousel(idGeser, idTitik, opsi){
-  opsi = opsi || {};                       // opsi.panah: tombol kiri/kanan | opsi.otomatis: jeda geser otomatis (ms) | opsi.otomatisMin: lebar layar minimum (px) agar geser otomatis aktif
+  opsi = opsi || {};                       // opsi.otomatis: jeda geser otomatis (ms) | opsi.otomatisMin: lebar layar minimum (px) agar geser otomatis aktif
   const geser = $(idGeser), wadah = $(idTitik);
   if (!geser || !wadah) return;
   const slide = geser.querySelectorAll('.sp-slide');
@@ -7512,19 +7498,18 @@ function pasangCarousel(idGeser, idTitik, opsi){
     return Math.max(0, Math.min(maks(), s.offsetLeft - (geser.clientWidth - s.offsetWidth) / 2));
   }
   function bangunTitik(){
-    wadah.querySelectorAll('button:not(.sp-panah)').forEach(b => b.remove());
-    const n = jumlah(), pembatas = wadah.querySelector('.sp-panah:last-child');
+    wadah.querySelectorAll('button').forEach(b => b.remove());
+    const n = jumlah();
     for (let i = 0; i < n; i++){
       const b = document.createElement('button');
       b.type = 'button'; b.setAttribute('aria-label', 'Posisi ' + (i + 1) + ' dari ' + n);
       b.addEventListener('click', () => geser.scrollTo({ left: tujuan(i), behavior: 'smooth' }));
-      if (pembatas && wadah.contains(pembatas)) wadah.insertBefore(b, pembatas); else wadah.appendChild(b);
+      wadah.appendChild(b);
     }
-    titik = wadah.querySelectorAll('button:not(.sp-panah)'); aktif = -1;
+    titik = wadah.querySelectorAll('button'); aktif = -1;
   }
   function langkah(){ return slide.length > 1 ? slide[1].offsetLeft - slide[0].offsetLeft : geser.clientWidth; }
   function tandai(){
-    perbaruiUjung();
     let i = 0, jarak = Infinity;
     for (let k = 0, n = jumlah(); k < n; k++){ const d = Math.abs(tujuan(k) - geser.scrollLeft); if (d < jarak) { jarak = d; i = k; } }
     if (i === aktif) return;
@@ -7537,36 +7522,9 @@ function pasangCarousel(idGeser, idTitik, opsi){
     geser.scrollTo({ left: tujuan(Math.min(Math.max(0, ada), jumlah() - 1)) }); tandai();
   });
 
-  /* opsi.ujung: panah berwarna lembut (tidak aktif) di gambar pertama / terakhir, dan tidak berputar */
-  let btnKiri = null, btnKanan = null;
-  const diAwal = () => geser.scrollLeft <= 2;
   const diAkhir = () => geser.scrollLeft >= maks() - 2;
-  function perbaruiUjung(){
-    if (!opsi.ujung || !btnKiri) return;
-    const a = diAwal(), z = diAkhir();
-    btnKiri.classList.toggle('lembut', a);  btnKiri.setAttribute('aria-disabled', a ? 'true' : 'false');
-    btnKanan.classList.toggle('lembut', z); btnKanan.setAttribute('aria-disabled', z ? 'true' : 'false');
-  }
-
-  /* opsi.halaman: tiap langkah, gambar yang terpotong di sisi kanan hanya menyisakan 1/4 bagian di sisi kiri,
-     lalu gambar berikutnya muncul penuh; begitu seterusnya. Setelah mencapai ujung kembali ke awal. */
-  function langkahHalaman(){
-    const kanan = geser.scrollLeft + geser.clientWidth;
-    for (const s of slide){
-      const kiriS = s.offsetLeft, kananS = kiriS + s.offsetWidth;
-      if (kananS > kanan + 2){
-        const tujuanX = kiriS < kanan ? kiriS + s.offsetWidth * 0.75 : kiriS - 16;
-        return Math.max(0, Math.min(maks(), tujuanX));
-      }
-    }
-    return 0;
-  }
   function maju(){
-    if (opsi.halaman){
-      geser.scrollTo({ left: diAkhir() ? 0 : langkahHalaman(), behavior: 'smooth' });
-    } else {
-      ke(diAkhir() ? 0 : aktif + 1);     // setelah gambar terakhir kembali ke pertama
-    }
+    ke(diAkhir() ? 0 : aktif + 1);     // setelah gambar terakhir kembali ke pertama
   }
 
   /* pindah ke gambar ke-i (berputar: setelah terakhir kembali ke pertama) */
@@ -7580,29 +7538,6 @@ function pasangCarousel(idGeser, idTitik, opsi){
     berhenti();
     if (!opsi.otomatis || slide.length < 2 || ditahan || document.hidden || !terlihat || kurangGerak() || !layarCukupLebar()) return;
     timer = setInterval(maju, opsi.otomatis);
-  }
-  if (opsi.panah && slide.length > 1){
-    const panah = (arah) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'sp-panah';
-      b.setAttribute('aria-label', arah < 0 ? 'Gambar sebelumnya' : 'Gambar berikutnya');
-      b.innerHTML = '<i class="fa-solid fa-chevron-' + (arah < 0 ? 'left' : 'right') + '" aria-hidden="true"></i>';
-      b.addEventListener('click', () => {
-        if (opsi.ujung && (arah < 0 ? diAwal() : diAkhir())) return;      // sudah di ujung: tidak berputar
-        ke(opsi.ujung ? Math.max(0, Math.min(jumlah() - 1, aktif + arah)) : aktif + arah);
-        mulaiOto();
-      });
-      return b;
-    };
-    wadah.classList.add('dengan-panah');
-    btnKiri = panah(-1); btnKanan = panah(1);
-    wadah.insertBefore(btnKiri, wadah.firstChild);
-    wadah.appendChild(btnKanan);
-    if (opsi.ujung){
-      geser.querySelectorAll('img').forEach(im => im.addEventListener('load', perbaruiUjung));   // lebar berubah setelah gambar termuat
-      window.addEventListener('resize', perbaruiUjung);
-      perbaruiUjung();
-    }
   }
   bangunTitik();
   if ('ResizeObserver' in window) new ResizeObserver(() => { if (titik.length !== jumlah()){ bangunTitik(); tandai(); } }).observe(geser);   // saat halaman utama baru tampil setelah login
@@ -7631,7 +7566,7 @@ function pasangCarousel(idGeser, idTitik, opsi){
   });
   tandai();
 }
-pasangCarousel('dsGeser', 'dsTitik', { panah: true, ujung: true, otomatis: 3000, otomatisMin: 768, bertahap: true });   // Data Statistik: seperti Standar Pelayanan, otomatis tiap 3 detik hanya di PC/tablet (>= 768px); di HP geser manual
+pasangCarousel('dsGeser', 'dsTitik', { otomatis: 3000, otomatisMin: 768, bertahap: true });   // Data Statistik: seperti Standar Pelayanan, otomatis tiap 3 detik hanya di PC/tablet (>= 768px); di HP geser manual
 pasangCarousel('spGeser', 'spTitik', { otomatis: 3000, bertahap: true });   // Standar Pelayanan: geser manual / otomatis tiap 3 detik
 
 mulai();

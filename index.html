@@ -7484,7 +7484,7 @@ document.addEventListener('keydown', e => {
    STANDAR PELAYANAN: carousel geser kanan + titik navigasi
    ===================================================================== */
 function pasangCarousel(idGeser, idTitik, opsi){
-  opsi = opsi || {};                       // opsi.panah: tombol kiri/kanan | opsi.otomatis: jeda geser otomatis (ms)
+  opsi = opsi || {};                       // opsi.panah: tombol kiri/kanan | opsi.otomatis: jeda geser otomatis (ms) | opsi.otomatisMin: lebar layar minimum (px) agar geser otomatis aktif
   const geser = $(idGeser), wadah = $(idTitik);
   if (!geser || !wadah) return;
   const slide = geser.querySelectorAll('.sp-slide');
@@ -7574,10 +7574,11 @@ function pasangCarousel(idGeser, idTitik, opsi){
 
   /* geser otomatis: berhenti saat disentuh/diarahkan kursor/difokus, saat tab tersembunyi, atau di luar layar */
   let timer = null, ditahan = false, terlihat = true;
+  const layarCukupLebar = () => !opsi.otomatisMin || matchMedia('(min-width:' + opsi.otomatisMin + 'px)').matches;
   function berhenti(){ clearInterval(timer); timer = null; }
   function mulaiOto(){
     berhenti();
-    if (!opsi.otomatis || slide.length < 2 || ditahan || document.hidden || !terlihat || kurangGerak()) return;
+    if (!opsi.otomatis || slide.length < 2 || ditahan || document.hidden || !terlihat || kurangGerak() || !layarCukupLebar()) return;
     timer = setInterval(maju, opsi.otomatis);
   }
   if (opsi.panah && slide.length > 1){
@@ -7618,6 +7619,7 @@ function pasangCarousel(idGeser, idTitik, opsi){
       el.addEventListener('focusout', lepas);
     });
     document.addEventListener('visibilitychange', mulaiOto);
+    if (opsi.otomatisMin) window.addEventListener('resize', mulaiOto);   // otomatis hidup/mati saat lebar layar berubah
     if ('IntersectionObserver' in window){
       new IntersectionObserver((e) => { terlihat = e[0].isIntersecting; mulaiOto(); }, { threshold: 0.5 }).observe(geser);
     }
@@ -7629,7 +7631,7 @@ function pasangCarousel(idGeser, idTitik, opsi){
   });
   tandai();
 }
-pasangCarousel('dsGeser', 'dsTitik', { panah: true, ujung: true, otomatis: 3000, bertahap: true });   // Data Statistik: sama seperti Standar Pelayanan, geser manual / otomatis tiap 3 detik; setelah gambar terakhir kembali ke pertama
+pasangCarousel('dsGeser', 'dsTitik', { panah: true, ujung: true, otomatis: 3000, otomatisMin: 768, bertahap: true });   // Data Statistik: seperti Standar Pelayanan, otomatis tiap 3 detik hanya di PC/tablet (>= 768px); di HP geser manual
 pasangCarousel('spGeser', 'spTitik', { otomatis: 3000, bertahap: true });   // Standar Pelayanan: geser manual / otomatis tiap 3 detik
 
 mulai();

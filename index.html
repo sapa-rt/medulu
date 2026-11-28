@@ -7629,7 +7629,7 @@ function pasangCarousel(idGeser, idTitik, opsi){
   });
   tandai();
 }
-pasangCarousel('dsGeser', 'dsTitik', { panah: true, ujung: true });   // Data Statistik: geser manual / otomatis tiap 3 detik, gambar terpotong menyisakan 1/4 di tiap langkah
+pasangCarousel('dsGeser', 'dsTitik', { panah: true, ujung: true, otomatis: 3000, bertahap: true });   // Data Statistik: sama seperti Standar Pelayanan, geser manual / otomatis tiap 3 detik; setelah gambar terakhir kembali ke pertama
 pasangCarousel('spGeser', 'spTitik', { otomatis: 3000, bertahap: true });   // Standar Pelayanan: geser manual / otomatis tiap 3 detik
 
 mulai();

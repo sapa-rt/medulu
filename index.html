@@ -414,13 +414,6 @@
   .kr-kotak.b{background:#fce7f3;color:#be185d}
   .kr-kotak.l{background:#fef3c7;color:#b45309}
   .kr-kotak.a{background:#dcfce7;color:#15803d}
-  .kr-kotak span small{font-size:.8em;font-weight:500;opacity:.85}
-  .kr-kotak b small{font-size:.6em}
-  .kr-tiga{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .kr-tiga .kr-kotak{flex-direction:column;justify-content:center;text-align:center;gap:4px;padding:10px 4px;font-size:.66rem;min-width:0}
-  .kr-tiga .kr-kotak i{font-size:1.2rem}
-  .kr-tiga .kr-kotak span{align-items:center;overflow-wrap:anywhere}
-  .kr-tiga .kr-kotak b{font-size:1.05rem}
   .st-biru{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:600;color:var(--biru-tua);
     background:#e6f0fd;padding:9px 12px;border-radius:12px;margin:0 0 12px}
   .st-biru i{color:var(--biru)}
@@ -875,6 +868,7 @@
   .st-legenda b{color:var(--biru-tua);margin-left:auto;padding-left:14px;text-align:right;font-variant-numeric:tabular-nums}
   .st-bar{position:relative;width:100%;height:220px}
   .st-bar.tinggi{height:250px}
+  .st-bar.profesi{height:380px}
   .st-ket{margin-top:10px;font-size:.66rem;color:var(--abu);line-height:1.5}
 
   /* Modal konfirmasi keluar */
@@ -1246,6 +1240,7 @@
   .subform-isi:not(.penuh){padding:24px max(24px,calc((100% - var(--lb)) / 2)) 32px}
   .st-bar{height:calc(220px * var(--z))}
   .st-bar.tinggi{height:calc(250px * var(--z))}
+  .st-bar.profesi{height:calc(380px * var(--z))}
   .st-donut .wadah{width:calc(130px * var(--z));height:calc(130px * var(--z))}
 
   .daftar-menu{display:grid;grid-template-columns:1fr 1fr}
@@ -2488,7 +2483,7 @@ const pluginNilai = {
     const horiz = c.options.indexAxis === 'y';
     c.data.datasets.forEach((ds, i) => c.getDatasetMeta(i).data.forEach((bar, j) => {
       const v = ds.data[j]; if (v === null || v === undefined) return;
-      if (horiz){ g.textAlign = 'left'; g.fillText(fmt(v), bar.x + 6, bar.y); }
+      if (horiz){ g.textAlign = 'left'; g.fillText(ds.teksNilai ? ds.teksNilai[j] : fmt(v), bar.x + 6, bar.y); }
       else { g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText(fmt(v), bar.x, bar.y - 4); }
     }));
     g.restore();
@@ -2553,7 +2548,7 @@ async function renderStatistik(isi){
       <div class="kr-sub" style="margin-top:0">Pendidikan</div>
       <div class="st-bar tinggi"><canvas id="stPendidikan"></canvas></div>
       <div class="st-ket">Diploma: D1–D3 • Sarjana: S1/D4 • Pascasarjana: S2-S3</div>
-      ${htmlPekerjaan(d)}
+      ${htmlPekerjaan(d, 'stProfesi')}
     </div>` : '');
 
   if (d){
@@ -2571,6 +2566,7 @@ async function renderStatistik(isi){
         datasets:[{ label:'Jiwa', data:[pd.sd||0, pd.smp||0, pd.sma||0, pd.diploma||0, pd.sarjana||0, pd.pascasarjana||0],
           backgroundColor:'#1558c9', borderRadius:6, maxBarThickness:22 }] },
       options:opsiBar(true, false), plugins:[pluginNilai] }));
+    gambarProfesi($('stProfesi'), d, chartStat);
   }
   if (kr) gambarChartKr($('stKr'), kr, chartStat);
   if (pr) gambarCerai($('stCerai'), pr.cerai, chartStat);
@@ -7314,24 +7310,32 @@ function htmlPrioritas(pr, gagal, idCerai){
     <div class="kr-sub">Cerai menurut Jenis Kelamin</div>
     <div class="st-bar"><canvas id="${idCerai}"></canvas></div>`;
 }
-/* Kartu profesi di bawah Pendidikan: jumlah Jiwa dan KK (get_statistik_detail().pekerjaan) */
-function htmlPekerjaan(d){
-  const k = d && d.pekerjaan;
-  if (!k) return aksesPenuh ? `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>Data pekerjaan belum tersedia. Perbarui fungsi get_statistik_detail (06_dashboard_statistik.sql).</div>` : '';
-  const kotak = (kls, ikon, nama, v) => { v = v || {};
-    return `<div class="kr-kotak ${kls}"><i class="fa-solid ${ikon}"></i><span>${nama}<b>${fmt(Number(v.jiwa) || 0)}<small> Jiwa</small></b><small>${fmt(Number(v.kk) || 0)} KK</small></span></div>`; };
+/* Profesi di bawah Pendidikan: chart batang per kategori, warna berbeda tiap batang.
+   Angka di batang = Jiwa (jumlah KK). Data: get_statistik_detail().pekerjaan[kategori] = { jiwa, kk } */
+const KATEGORI_PROFESI = [
+  ['PNS/PPPK', 'pns', '#1558c9'], ['Guru', 'guru', '#e11d74'], ['Dosen', 'dosen', '#f59e0b'],
+  ['Dokter', 'dokter', '#16a34a'], ['Apoteker', 'apoteker', '#06b6d4'], ['TNI', 'tni', '#4d7c0f'],
+  ['Polri', 'polri', '#1e3a8a'], ['Karyawan BUMN', 'bumn', '#8b5cf6'], ['Karyawan Swasta', 'swasta', '#ff8a1f'],
+  ['Wiraswasta/Lainnya', 'lainnya', '#0d9488'], ['Pensiunan', 'pensiunan', '#64748b']
+];
+function htmlPekerjaan(d, idCanvas){
+  if (!(d && d.pekerjaan)) return aksesPenuh ? `<div class="kosong" style="margin:12px 0"><i class="fa-solid fa-triangle-exclamation"></i>Data pekerjaan belum tersedia. Perbarui fungsi get_statistik_detail (06_dashboard_statistik.sql).</div>` : '';
   return `<div class="kr-sub">Profesi</div>
-    <div class="kr-tiga">
-      ${kotak('d', 'fa-id-badge', 'PNS', k.pns)}
-      ${kotak('l', 'fa-user-graduate', 'Dosen', k.dosen)}
-      ${kotak('b', 'fa-chalkboard-user', 'Guru', k.guru)}
-      ${kotak('a', 'fa-user-doctor', 'Dokter', k.dokter)}
-      ${kotak('d', 'fa-pills', 'Apoteker', k.apoteker)}
-      ${kotak('l', 'fa-user-clock', 'Pensiunan', k.pensiunan)}
-      ${kotak('b', 'fa-building', 'Karyawan BUMN/D', k.bumn)}
-      ${kotak('a', 'fa-briefcase', 'Karyawan Swasta', k.swasta)}
-      ${kotak('d', 'fa-users-gear', 'Lainnya', k.lainnya)}
-    </div>`;
+    <div class="st-bar profesi"><canvas id="${idCanvas}"></canvas></div>
+    <div class="st-ket">Angka pada batang: jumlah jiwa (jumlah KK)</div>`;
+}
+function gambarProfesi(canvas, d, daftar){
+  const k = d && d.pekerjaan; if (!canvas || !k) return;
+  const v = KATEGORI_PROFESI.map(([, kunci]) => k[kunci] || {});
+  const jiwa = v.map(x => Number(x.jiwa) || 0), kk = v.map(x => Number(x.kk) || 0);
+  const opsi = opsiBar(true, false);
+  opsi.layout.padding.right = 88;
+  opsi.plugins.tooltip = { callbacks:{ label:(c) => `${fmt(jiwa[c.dataIndex])} jiwa • ${fmt(kk[c.dataIndex])} KK` } };
+  daftar.push(new Chart(canvas, { type:'bar',
+    data:{ labels:KATEGORI_PROFESI.map(x => x[0]),
+      datasets:[{ label:'Jiwa', data:jiwa, teksNilai:jiwa.map((n, i) => `${fmt(n)} (${fmt(kk[i])} KK)`),
+        backgroundColor:KATEGORI_PROFESI.map(x => x[2]), borderRadius:6, maxBarThickness:22 }] },
+    options:opsi, plugins:[pluginNilai] }));
 }
 function htmlGender(idDonut){
   const L = statistik.laki_laki || 0, P = statistik.perempuan || 0;
@@ -7448,13 +7452,14 @@ async function bukaModalStat(kunci){
       <div class="kr-sub" style="margin-top:0">Pendidikan</div>
       <div class="st-bar tinggi"><canvas id="msBar"></canvas></div>
       <div class="st-ket">Diploma: D1–D3 • Sarjana: S1/D4 • Pascasarjana: S2-S3</div>
-      ${htmlPekerjaan(d)}`;
+      ${htmlPekerjaan(d, 'msProfesi')}`;
     const pd = d.pendidikan || {};
     chartModal.push(new Chart($('msBar'), { type:'bar',
       data:{ labels:['SD','SMP','SMA','Diploma','Sarjana','Pascasarjana'],
         datasets:[{ label:'Jiwa', data:[pd.sd||0, pd.smp||0, pd.sma||0, pd.diploma||0, pd.sarjana||0, pd.pascasarjana||0],
           backgroundColor:'#1558c9', borderRadius:6, maxBarThickness:22 }] },
       options:opsiBar(true, false), plugins:[pluginNilai] }));
+    gambarProfesi($('msProfesi'), d, chartModal);
   }
 }
 function tutupModalStat(){
